@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Tuple
 
 import numpy as np
+from tqdm import tqdm
 
 
 def parse_atom_type(line: str) -> str | None:
@@ -51,7 +51,7 @@ def parse_atom_coord(line: str) -> Tuple[float, float, float] | None:
 def collect_atom_types(pdb_files: Sequence[Path]) -> List[str]:
     """Scan files once to discover the global atom vocabulary."""
     atom_types = set()
-    for pdb_file in pdb_files:
+    for pdb_file in tqdm(pdb_files, desc="Scanning atom types"):
         with pdb_file.open("r") as handle:
             for line in handle:
                 atom = parse_atom_type(line)
@@ -128,7 +128,7 @@ def main() -> None:
     atom_types = collect_atom_types(pdb_files)
     atom_to_idx = {atom: i for i, atom in enumerate(atom_types)}
 
-    for pdb_file in pdb_files:
+    for pdb_file in tqdm(pdb_files, desc="Processing PDB files"):
         process_file(pdb_file, args.output_dir, atom_to_idx)
 
     with (args.output_dir / "atom_types.json").open("w") as handle:
