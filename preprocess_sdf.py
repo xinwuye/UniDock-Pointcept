@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
@@ -141,24 +142,29 @@ def main() -> None:
     if not sdf_files:
         raise FileNotFoundError(f"No .sdf files found in {args.input_dir}")
 
-    if args.output_dir.exists() and not args.overwrite:
-        raise FileExistsError(
-            f"{args.output_dir} already exists. Use --overwrite to reuse it."
-        )
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     atom_types = collect_atom_types(sdf_files)
     atom_to_idx = {atom: i for i, atom in enumerate(atom_types)}
 
+    skipped = 0
     for sdf_file in tqdm(sdf_files, desc="Processing SDF files"):
+        scene_dir = args.output_dir / sdf_file.stem
+        if scene_dir.exists():
+            if args.overwrite:
+                shutil.rmtree(scene_dir)
+            else:
+                skipped += 1
+                continue
         process_file(sdf_file, args.output_dir, atom_to_idx)
 
     with (args.output_dir / "atom_types.json").open("w") as handle:
         json.dump(atom_types, handle, indent=2)
 
     print(
-        f"Processed {len(sdf_files)} files. "
-        f"Atom types ({len(atom_types)}): {', '.join(atom_types)}"
+        f"Processed {len(sdf_files) - skipped} files "
+        f"(skipped {skipped}). Atom types ({len(atom_types)}): "
+        f"{', '.join(atom_types)}"
     )
 
 

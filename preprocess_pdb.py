@@ -7,13 +7,14 @@ Each atom is treated as a point. For every PDB file we extract:
     - atom_type.npy: (N, C) float32 one-hot encoding over atom species
 
 Usage:
-    python tools/preprocess_pdb.py --input-dir path/to/pdbs --output-dir data/pdb
+    python preprocess_pdb.py --input-dir path/to/pdbs --output-dir data/pdb
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Tuple
 
@@ -119,24 +120,29 @@ def main() -> None:
     if not pdb_files:
         raise FileNotFoundError(f"No .pdb files found in {args.input_dir}")
 
-    if args.output_dir.exists() and not args.overwrite:
-        raise FileExistsError(
-            f"{args.output_dir} already exists. Use --overwrite to reuse it."
-        )
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     atom_types = collect_atom_types(pdb_files)
     atom_to_idx = {atom: i for i, atom in enumerate(atom_types)}
 
+    skipped = 0
     for pdb_file in tqdm(pdb_files, desc="Processing PDB files"):
+        scene_dir = args.output_dir / pdb_file.stem
+        if scene_dir.exists():
+            if args.overwrite:
+                shutil.rmtree(scene_dir)
+            else:
+                skipped += 1
+                continue
         process_file(pdb_file, args.output_dir, atom_to_idx)
 
     with (args.output_dir / "atom_types.json").open("w") as handle:
         json.dump(atom_types, handle, indent=2)
 
     print(
-        f"Processed {len(pdb_files)} files. "
-        f"Atom types ({len(atom_types)}): {', '.join(atom_types)}"
+        f"Processed {len(pdb_files) - skipped} files "
+        f"(skipped {skipped}). Atom types ({len(atom_types)}): "
+        f"{', '.join(atom_types)}"
     )
 
 
