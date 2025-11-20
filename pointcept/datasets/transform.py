@@ -938,6 +938,77 @@ class GridSample(object):
 
 
 @TRANSFORMS.register_module()
+class GridSampleAccumulate(object):
+    """
+    Grid sampling variant that aggregates features within each voxel rather than
+    randomly selecting one representative. Coordinates are averaged per voxel,
+    while specified feature keys are summed.
+    """
+
+    def __init__(
+        self,
+        grid_size=0.05,
+        hash_type="fnv",
+        feat_keys=None,
+        return_grid_coord=True,
+        return_inverse=False,
+        return_min_coord=False,
+    ):
+        self.grid_size = grid_size
+        self.hash = (
+            GridSample.fnv_hash_vec if hash_type == "fnv" else GridSample.ravel_hash_vec
+        )
+        self.feat_keys = feat_keys or []
+        self.return_grid_coord = return_grid_coord
+        self.return_inverse = return_inverse
+        self.return_min_coord = return_min_coord
+
+    def __call__(self, data_dict):
+        assert "coord" in data_dict.keys()
+        scaled_coord = data_dict["coord"] / np.array(self.grid_size)
+        grid_coord = np.floor(scaled_coord).astype(int)
+        min_coord = grid_coord.min(0)
+        grid_coord -= min_coord
+        scaled_coord -= min_coord
+        min_coord = min_coord * np.array(self.grid_size)
+        key = self.hash(grid_coord)
+        idx_sort = np.argsort(key)
+        key_sort = key[idx_sort]
+        _, inverse, count = np.unique(key_sort, return_inverse=True, return_counts=True)
+        idx_ptr = np.cumsum(np.insert(count, 0, 0))
+        idx_unique = idx_sort[idx_ptr[:-1]]
+
+        coord_sorted = data_dict["coord"][idx_sort]
+        coord_sum = np.add.reduceat(coord_sorted, idx_ptr[:-1], axis=0)
+        coord_mean = coord_sum / count[:, None]
+
+        feat_agg = {}
+        for key in self.feat_keys:
+            if key in data_dict:
+                feat_sorted = data_dict[key][idx_sort]
+                feat_agg[key] = np.add.reduceat(feat_sorted, idx_ptr[:-1], axis=0)
+
+        data_dict = index_operator(data_dict, idx_unique)
+
+        data_dict["coord"] = coord_mean.astype(np.float32)
+        for key, value in feat_agg.items():
+            data_dict[key] = value.astype(np.float32)
+
+        if self.return_grid_coord:
+            data_dict["grid_coord"] = grid_coord[idx_unique]
+            if "grid_coord" not in data_dict["index_valid_keys"]:
+                data_dict["index_valid_keys"].append("grid_coord")
+        if self.return_inverse:
+            inverse_map = np.zeros_like(inverse)
+            inverse_map[idx_sort] = inverse
+            data_dict["inverse"] = inverse_map
+        if self.return_min_coord:
+            data_dict["min_coord"] = min_coord.reshape([1, 3])
+        data_dict["grid_size"] = self.grid_size
+        return data_dict
+
+
+@TRANSFORMS.register_module()
 class SphereCrop(object):
     def __init__(self, point_max=80000, sample_rate=None, mode="random"):
         self.point_max = point_max

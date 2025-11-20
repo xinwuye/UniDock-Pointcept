@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch_scatter
 import torch_cluster
 from peft import LoraConfig, get_peft_model
@@ -336,3 +337,80 @@ class DefaultClassifier(nn.Module):
             return dict(loss=loss, cls_logits=cls_logits)
         else:
             return dict(cls_logits=cls_logits)
+
+
+@MODELS.register_module()
+class PointTransformerVAE(nn.Module):
+    """
+    VAE wrapper around PT-v3 that reconstructs coordinates and input features.
+    """
+
+    def __init__(
+        self,
+        backbone_out_channels,
+        feat_channels,
+        latent_dim=64,
+        coord_weight=1.0,
+        feat_weight=1.0,
+        kl_weight=1e-4,
+        backbone=None,
+    ):
+        super().__init__()
+        self.backbone = build_model(backbone)
+        self.mu_head = nn.Linear(backbone_out_channels, latent_dim)
+        self.logvar_head = nn.Linear(backbone_out_channels, latent_dim)
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, latent_dim),
+            nn.GELU(),
+            nn.Linear(latent_dim, latent_dim),
+            nn.GELU(),
+        )
+        self.coord_head = nn.Linear(latent_dim, 3)
+        self.feat_head = nn.Linear(latent_dim, feat_channels)
+        self.coord_weight = coord_weight
+        self.feat_weight = feat_weight
+        self.kl_weight = kl_weight
+
+    def forward(self, input_dict):
+        point = Point(input_dict)
+        point = self.backbone(point)
+        if isinstance(point, Point):
+            while "pooling_parent" in point.keys():
+                assert "pooling_inverse" in point.keys()
+                parent = point.pop("pooling_parent")
+                inverse = point.pop("pooling_inverse")
+                parent.feat = torch.cat([parent.feat, point.feat[inverse]], dim=-1)
+                point = parent
+            feat = point.feat
+        else:
+            feat = point
+
+        mu = self.mu_head(feat)
+        logvar = self.logvar_head(feat)
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        z = mu + eps * std
+
+        hidden = self.decoder(z)
+        recon_coord = self.coord_head(hidden)
+        recon_feat = self.feat_head(hidden)
+
+        coord_target = input_dict["coord"]
+        feat_target = input_dict["atom_type"]
+
+        coord_loss = F.mse_loss(recon_coord, coord_target)
+        feat_loss = F.mse_loss(recon_feat, feat_target)
+        kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+
+        loss = (
+            self.coord_weight * coord_loss
+            + self.feat_weight * feat_loss
+            + self.kl_weight * kl_loss
+        )
+        return dict(
+            loss=loss,
+            recon_coord=recon_coord,
+            recon_feat=recon_feat,
+            mu=mu,
+            logvar=logvar,
+        )

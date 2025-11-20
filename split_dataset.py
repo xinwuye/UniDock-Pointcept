@@ -91,6 +91,9 @@ def main() -> None:
     random.shuffle(folders)
 
     prepare_output(args.output_dir, overwrite=args.overwrite)
+    metadata = args.input_dir / "atom_types.json"
+    if metadata.exists():
+        shutil.copy(metadata, args.output_dir / "atom_types.json")
 
     counts = assign_splits(len(folders), list(args.ratios))
     split_names = ["train", "val", "test"]
