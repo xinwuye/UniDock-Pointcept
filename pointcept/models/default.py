@@ -407,10 +407,13 @@ class PointTransformerVAE(nn.Module):
             + self.feat_weight * feat_loss
             + self.kl_weight * kl_loss
         )
-        return dict(
-            loss=loss,
-            recon_coord=recon_coord,
-            recon_feat=recon_feat,
-            mu=mu,
-            logvar=logvar,
-        )
+
+        output = dict(loss=loss)
+        if not self.training:
+            output.update(
+                recon_coord=recon_coord,
+                recon_feat=recon_feat,
+                mu=mu,
+                logvar=logvar,
+            )
+        return output
