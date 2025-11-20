@@ -7,7 +7,7 @@ num_worker = 8
 mix_prob = 0.0
 empty_cache = False
 enable_amp = True
-evaluate = False
+evaluate = True
 
 data_root = "data/pdbbind2020r1/proteins"
 
@@ -124,6 +124,7 @@ hooks = [
     dict(type="ModelHook"),
     dict(type="IterationTimer", warmup_iter=2),
     dict(type="InformationWriter"),
+    dict(type="ReconstructionEvaluator"),
     dict(type="CheckpointSaver", save_freq=None),
 ]
 

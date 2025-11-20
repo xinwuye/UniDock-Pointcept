@@ -244,6 +244,61 @@ class SemSegEvaluator(HookBase):
 
 
 @HOOKS.register_module()
+class ReconstructionEvaluator(HookBase):
+    def after_epoch(self):
+        if self.trainer.cfg.evaluate and self.trainer.val_loader is not None:
+            self.eval()
+
+    def eval(self):
+        self.trainer.logger.info(
+            ">>>>>>>>>>>>>>>> Start Reconstruction Evaluation >>>>>>>>>>>>>>>>"
+        )
+        self.trainer.model.eval()
+        device = (
+            torch.cuda.current_device()
+            if torch.cuda.is_available()
+            else torch.device("cpu")
+        )
+        loss_sum = torch.tensor(0.0, device=device)
+        count = torch.tensor(0.0, device=device)
+        for i, input_dict in enumerate(self.trainer.val_loader):
+            for key in input_dict.keys():
+                if isinstance(input_dict[key], torch.Tensor):
+                    input_dict[key] = input_dict[key].cuda(non_blocking=True)
+            with torch.no_grad():
+                output_dict = self.trainer.model(input_dict)
+            loss = output_dict["loss"]
+            if isinstance(loss, torch.Tensor):
+                loss = loss.detach().mean()
+            loss_sum += loss
+            count += 1.0
+            self.trainer.logger.info(
+                "Val: [{iter}/{max_iter}] Loss {loss:.4f}".format(
+                    iter=i + 1, max_iter=len(self.trainer.val_loader), loss=float(loss)
+                )
+            )
+        if comm.get_world_size() > 1:
+            dist.all_reduce(loss_sum)
+            dist.all_reduce(count)
+        avg_loss = (loss_sum / count).item()
+
+        current_epoch = self.trainer.epoch + 1
+        if self.trainer.writer is not None:
+            self.trainer.writer.add_scalar("val/loss", avg_loss, current_epoch)
+            if self.trainer.cfg.enable_wandb:
+                wandb.log(
+                    {"Epoch": current_epoch, "val/loss": avg_loss},
+                    step=wandb.run.step,
+                )
+        self.trainer.logger.info(
+            "Val result: Reconstruction Loss {:.4f}".format(avg_loss)
+        )
+        self.trainer.comm_info["current_metric_value"] = -avg_loss
+        self.trainer.comm_info["current_metric_name"] = "val_loss"
+        self.trainer.model.train()
+
+
+@HOOKS.register_module()
 class InsSegEvaluator(HookBase):
     def __init__(self, segment_ignore_index=(-1,), instance_ignore_index=-1):
         self.segment_ignore_index = segment_ignore_index
