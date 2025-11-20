@@ -9,6 +9,8 @@ empty_cache = False
 enable_amp = True
 evaluate = False
 
+data_root = "data/pdbbind2020r1/proteins"
+
 # Fixed atom vocabulary size
 num_atom_types = 45
 
