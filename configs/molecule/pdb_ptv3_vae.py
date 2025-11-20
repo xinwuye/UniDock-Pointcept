@@ -1,7 +1,5 @@
 _base_ = ["../_base_/default_runtime.py"]
 
-import json as _json
-from pathlib import Path as _Path
 
 # Misc
 batch_size = 8
@@ -11,15 +9,8 @@ empty_cache = False
 enable_amp = True
 evaluate = False
 
-data_root = "data/pdbbind2020r1/proteins"
-atom_types_file = _Path(data_root) / "atom_types.json"
-if atom_types_file.is_file():
-    with atom_types_file.open("r") as f:
-        num_atom_types = len(_json.load(f))
-else:
-    num_atom_types = 1
-
-del _json, _Path
+# Fixed atom vocabulary size
+num_atom_types = 45
 
 # Model
 model = dict(
