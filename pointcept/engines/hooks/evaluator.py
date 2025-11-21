@@ -260,6 +260,9 @@ class ReconstructionEvaluator(HookBase):
             else torch.device("cpu")
         )
         loss_sum = torch.tensor(0.0, device=device)
+        loss_coord_sum = torch.tensor(0.0, device=device)
+        loss_feat_sum = torch.tensor(0.0, device=device)
+        loss_kl_sum = torch.tensor(0.0, device=device)
         count = torch.tensor(0.0, device=device)
         for i, input_dict in enumerate(self.trainer.val_loader):
             for key in input_dict.keys():
@@ -272,6 +275,22 @@ class ReconstructionEvaluator(HookBase):
                 loss = loss.detach().mean()
             loss_sum += loss
             count += 1.0
+            # optional sub-losses
+            if "loss_coord" in output_dict:
+                v = output_dict["loss_coord"]
+                if isinstance(v, torch.Tensor):
+                    v = v.detach().mean()
+                loss_coord_sum += v
+            if "loss_feat" in output_dict:
+                v = output_dict["loss_feat"]
+                if isinstance(v, torch.Tensor):
+                    v = v.detach().mean()
+                loss_feat_sum += v
+            if "loss_kl" in output_dict:
+                v = output_dict["loss_kl"]
+                if isinstance(v, torch.Tensor):
+                    v = v.detach().mean()
+                loss_kl_sum += v
             self.trainer.logger.info(
                 "Val: [{iter}/{max_iter}] Loss {loss:.4f}".format(
                     iter=i + 1, max_iter=len(self.trainer.val_loader), loss=float(loss)
@@ -279,15 +298,30 @@ class ReconstructionEvaluator(HookBase):
             )
         if comm.get_world_size() > 1:
             dist.all_reduce(loss_sum)
+            dist.all_reduce(loss_coord_sum)
+            dist.all_reduce(loss_feat_sum)
+            dist.all_reduce(loss_kl_sum)
             dist.all_reduce(count)
         avg_loss = (loss_sum / count).item()
+        avg_coord = (loss_coord_sum / count).item()
+        avg_feat = (loss_feat_sum / count).item()
+        avg_kl = (loss_kl_sum / count).item()
 
         current_epoch = self.trainer.epoch + 1
         if self.trainer.writer is not None:
             self.trainer.writer.add_scalar("val/loss", avg_loss, current_epoch)
+            self.trainer.writer.add_scalar("val/loss_coord", avg_coord, current_epoch)
+            self.trainer.writer.add_scalar("val/loss_feat", avg_feat, current_epoch)
+            self.trainer.writer.add_scalar("val/loss_kl", avg_kl, current_epoch)
             if self.trainer.cfg.enable_wandb:
                 wandb.log(
-                    {"Epoch": current_epoch, "val/loss": avg_loss},
+                    {
+                        "Epoch": current_epoch,
+                        "val/loss": avg_loss,
+                        "val/loss_coord": avg_coord,
+                        "val/loss_feat": avg_feat,
+                        "val/loss_kl": avg_kl,
+                    },
                     step=wandb.run.step,
                 )
         self.trainer.logger.info(

@@ -538,12 +538,17 @@ class PointTransformerVAE2(nn.Module):
         recon_feat = self.feat_head(dec_feat)
 
         # Losses against current batch tokens
-        coord_loss = F.mse_loss(recon_coord, input_dict["coord"])
-        feat_loss = F.mse_loss(recon_feat, input_dict["atom_type"])
-        kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+        coord_loss = F.mse_loss(recon_coord, input_dict["coord"])  # scalar tensor
+        feat_loss = F.mse_loss(recon_feat, input_dict["atom_type"])  # scalar tensor
+        kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())  # scalar tensor
         loss = self.coord_weight * coord_loss + self.feat_weight * feat_loss + self.kl_weight * kl_loss
 
-        out = dict(loss=loss)
+        out = dict(
+            loss=loss,
+            loss_coord=coord_loss,
+            loss_feat=feat_loss,
+            loss_kl=kl_loss,
+        )
         if not self.training:
             out.update(recon_coord=recon_coord, recon_feat=recon_feat, mu=mu, logvar=logvar)
         return out
