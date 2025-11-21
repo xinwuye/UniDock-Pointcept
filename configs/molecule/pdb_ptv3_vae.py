@@ -78,13 +78,13 @@ eval_epoch = 200
 optimizer = dict(type="AdamW", lr=0.0001, weight_decay=0.01)
 scheduler = dict(
     type="OneCycleLR",
-    max_lr=[0.0001, 0.0002],
+    max_lr=[0.0001, 0.00005],
     pct_start=0.05,
     anneal_strategy="cos",
     div_factor=10.0,
     final_div_factor=1000.0,
 )
-param_dicts = [dict(keyword="block", lr=0.0002)]
+param_dicts = [dict(keyword="block", lr=0.00005)]
 
 # Dataset
 dataset_type = "MoleculeDataset"
