@@ -495,8 +495,10 @@ class PointTransformerVAE2(nn.Module):
         # Build point
         point = Point(input_dict)
 
-        # Run PTv3 encoder path explicitly
-        # Use backbone's embedding and encoder; do not enter decoder yet
+        # Prepare serialization & sparse tensor as PTv3 expects
+        point.serialization(order=self.backbone.order, shuffle_orders=self.backbone.shuffle_orders)
+        point.sparsify()
+        # Run PTv3 encoder path explicitly (embedding + encoder only)
         point = self.backbone.embedding(point)
         point = self.backbone.enc(point)
 
