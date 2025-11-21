@@ -463,9 +463,14 @@ class PointTransformerVAE2(nn.Module):
             nn.GELU(),
         )
 
+        # Determine decoder output channels (head input dim)
+        dec_out_channels = decoder_in_channels
+        if decoder_cfg and decoder_cfg.get("dec_channels"):
+            dec_out_channels = decoder_cfg.get("dec_out_channels", decoder_cfg["dec_channels"][0])
+
         # Reconstruction heads on decoder top features
-        self.coord_head = nn.Linear(decoder_in_channels, 3)
-        self.feat_head = nn.Linear(decoder_in_channels, feat_channels)
+        self.coord_head = nn.Linear(dec_out_channels, 3)
+        self.feat_head = nn.Linear(dec_out_channels, feat_channels)
 
         self.coord_weight = coord_weight
         self.feat_weight = feat_weight

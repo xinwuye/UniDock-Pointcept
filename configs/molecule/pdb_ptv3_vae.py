@@ -28,6 +28,7 @@ model = dict(
     decoder_cfg=dict(
         enc_channels=(32, 64, 128, 256, 512),
         dec_channels=(64, 64, 128, 256),
+        dec_out_channels=64,
         dec_depths=(2, 2, 2, 2),
         dec_num_head=(4, 4, 8, 16),
         dec_patch_size=(256, 256, 256, 256),
