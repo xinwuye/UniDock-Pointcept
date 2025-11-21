@@ -8,7 +8,8 @@ from collections import OrderedDict
 
 from pointcept.models.losses import build_criteria
 from pointcept.models.utils.structure import Point
-from pointcept.models.utils import offset2batch
+from pointcept.models.utils import offset2batch, offset2bincount
+from pointcept.models.point_transformer_v3.point_transformer_v3m1_base import PTv3NoSkipDecoder
 from .builder import MODELS, build_model
 
 
@@ -417,3 +418,125 @@ class PointTransformerVAE(nn.Module):
                 logvar=logvar,
             )
         return output
+
+
+@MODELS.register_module()
+class PointTransformerVAE2(nn.Module):
+    """
+    Standard VAE-style wrapper over PTv3:
+    - Encoder: use PTv3 embedding + encoder to get low-resolution tokens
+    - Global pooling to a single latent per-sample (max pooling)
+    - Sample z, repeat to token count, concatenate noise, project to decoder input dim
+    - Decoder: use PTv3 decoder to upsample back (no manual skip concatenation here)
+    - Heads: predict coord + feature; compute reconstruction + KL losses
+    """
+
+    def __init__(
+        self,
+        encoder_out_channels,  # channels at encoder output (e.g., enc_channels[-1])
+        decoder_in_channels,   # channels expected by decoder input
+        feat_channels,         # output feature channels to reconstruct (e.g., num_atom_types)
+        latent_dim=64,
+        noise_dim=32,
+        coord_weight=1.0,
+        feat_weight=1.0,
+        kl_weight=1e-4,
+        backbone=None,
+        decoder_cfg=None,  # dict: enc_channels, dec_channels, dec_depths, dec_num_head, dec_patch_size, plus flags
+    ):
+        super().__init__()
+        self.backbone = build_model(backbone)
+        self.encoder_out_channels = encoder_out_channels
+        self.decoder_in_channels = decoder_in_channels
+        self.latent_dim = latent_dim
+        self.noise_dim = noise_dim
+
+        # Latent heads on pooled encoder features
+        self.mu_head = nn.Linear(encoder_out_channels, latent_dim)
+        self.logvar_head = nn.Linear(encoder_out_channels, latent_dim)
+
+        # Project repeated latent (+ noise) to decoder input channels
+        self.z_to_dec = nn.Sequential(
+            nn.Linear(latent_dim + noise_dim, decoder_in_channels),
+            nn.GELU(),
+            nn.Linear(decoder_in_channels, decoder_in_channels),
+            nn.GELU(),
+        )
+
+        # Reconstruction heads on decoder top features
+        self.coord_head = nn.Linear(decoder_in_channels, 3)
+        self.feat_head = nn.Linear(decoder_in_channels, feat_channels)
+
+        self.coord_weight = coord_weight
+        self.feat_weight = feat_weight
+        self.kl_weight = kl_weight
+        # Build no-skip decoder if cfg provided
+        self.decoder_noskip = None
+        self.decoder_cfg = decoder_cfg or {}
+        if self.decoder_cfg:
+            self.decoder_noskip = PTv3NoSkipDecoder(
+                enc_channels=self.decoder_cfg.get("enc_channels"),
+                dec_channels=self.decoder_cfg.get("dec_channels"),
+                dec_depths=self.decoder_cfg.get("dec_depths"),
+                dec_num_head=self.decoder_cfg.get("dec_num_head"),
+                dec_patch_size=self.decoder_cfg.get("dec_patch_size"),
+                drop_path=self.decoder_cfg.get("drop_path", 0.0),
+                norm_layer=self.decoder_cfg.get("norm_layer", None),
+                act_layer=self.decoder_cfg.get("act_layer", nn.GELU),
+                pre_norm=self.decoder_cfg.get("pre_norm", True),
+                enable_rpe=self.decoder_cfg.get("enable_rpe", False),
+                enable_flash=self.decoder_cfg.get("enable_flash", True),
+                upcast_attention=self.decoder_cfg.get("upcast_attention", False),
+                upcast_softmax=self.decoder_cfg.get("upcast_softmax", False),
+                order=self.decoder_cfg.get("order", ("z", "z-trans")),
+            )
+
+    def forward(self, input_dict):
+        # Build point
+        point = Point(input_dict)
+
+        # Run PTv3 encoder path explicitly
+        # Use backbone's embedding and encoder; do not enter decoder yet
+        point = self.backbone.embedding(point)
+        point = self.backbone.enc(point)
+
+        # Global pooling (max) over tokens per sample
+        # indptr from offset: pad with leading 0
+        indptr = nn.functional.pad(point.offset, (1, 0))
+        pooled = torch_scatter.segment_csr(
+            src=point.feat,
+            indptr=indptr,
+            reduce="max",
+        )  # [B, C_enc]
+
+        # Latent parameters & reparameterization
+        mu = self.mu_head(pooled)
+        logvar = self.logvar_head(pooled)
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        z = mu + eps * std  # [B, latent_dim]
+
+        # Repeat z to token-level and add noise
+        batch_idx = offset2batch(point.offset)
+        z_rep = z[batch_idx]  # [N, latent_dim]
+        noise = torch.randn(z_rep.size(0), self.noise_dim, device=z_rep.device, dtype=z_rep.dtype)
+        fused = torch.cat([z_rep, noise], dim=-1)
+
+        # Project to decoder input channels; decode with no-skip PTv3-style decoder if available
+        point.feat = self.z_to_dec(fused)
+        point = self.decoder_noskip(point)
+        dec_feat = point.feat
+
+        recon_coord = self.coord_head(dec_feat)
+        recon_feat = self.feat_head(dec_feat)
+
+        # Losses against current batch tokens
+        coord_loss = F.mse_loss(recon_coord, input_dict["coord"])
+        feat_loss = F.mse_loss(recon_feat, input_dict["atom_type"])
+        kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+        loss = self.coord_weight * coord_loss + self.feat_weight * feat_loss + self.kl_weight * kl_loss
+
+        out = dict(loss=loss)
+        if not self.training:
+            out.update(recon_coord=recon_coord, recon_feat=recon_feat, mu=mu, logvar=logvar)
+        return out

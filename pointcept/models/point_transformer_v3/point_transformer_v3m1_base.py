@@ -482,6 +482,121 @@ class SerializedUnpooling(PointModule):
         return parent
 
 
+class SerializedUnpoolingNoSkip(PointModule):
+    """
+    Unpooling without using encoder skip features.
+
+    It propagates child features to the parent resolution via the stored
+    pooling mapping, with an optional linear projection + norm/act.
+    """
+
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        norm_layer=None,
+        act_layer=None,
+        traceable=False,
+    ):
+        super().__init__()
+        self.proj = PointSequential(nn.Linear(in_channels, out_channels))
+        if norm_layer is not None:
+            self.proj.add(norm_layer(out_channels))
+        if act_layer is not None:
+            self.proj.add(act_layer())
+        self.traceable = traceable
+
+    def forward(self, point: Point):
+        assert "pooling_parent" in point.keys()
+        assert "pooling_inverse" in point.keys()
+        parent = point.pop("pooling_parent")
+        inverse = point.pop("pooling_inverse")
+        point = self.proj(point)
+        # Directly lift child features to parent space without skip fusion
+        parent.feat = point.feat[inverse]
+        if self.traceable:
+            parent["unpooling_parent"] = point
+        return parent
+
+
+class PTv3NoSkipDecoder(PointModule):
+    """
+    A PTv3-style decoder that replaces skip-fusing SerializedUnpooling with
+    SerializedUnpoolingNoSkip. It mirrors the original decoder structure but
+    does not use encoder skip connections.
+    """
+
+    def __init__(
+        self,
+        enc_channels,
+        dec_channels,
+        dec_depths,
+        dec_num_head,
+        dec_patch_size,
+        drop_path=0.0,
+        norm_layer=None,
+        act_layer=None,
+        pre_norm=True,
+        enable_rpe=False,
+        enable_flash=True,
+        upcast_attention=False,
+        upcast_softmax=False,
+        order=("z", "z-trans"),
+    ):
+        super().__init__()
+        self.order = [order] if isinstance(order, str) else order
+        self.num_stages = len(enc_channels)
+        # Build drop_path schedule like the original
+        dec_drop_path = [x.item() for x in torch.linspace(0, drop_path, sum(dec_depths))]
+        self.dec = PointSequential()
+        # In original, dec_channels is len(stages)-1 long (for s = S-2..0)
+        dec_channels = list(dec_channels) + [enc_channels[-1]]
+        for s in reversed(range(self.num_stages - 1)):
+            dec_drop_path_ = dec_drop_path[sum(dec_depths[:s]) : sum(dec_depths[: s + 1])]
+            dec_drop_path_.reverse()
+            dec = PointSequential()
+            # No-skip unpool
+            dec.add(
+                SerializedUnpoolingNoSkip(
+                    in_channels=dec_channels[s + 1],
+                    out_channels=dec_channels[s],
+                    norm_layer=norm_layer,
+                    act_layer=act_layer,
+                ),
+                name="up",
+            )
+            for i in range(dec_depths[s]):
+                dec.add(
+                    Block(
+                        channels=dec_channels[s],
+                        num_heads=dec_num_head[s],
+                        patch_size=dec_patch_size[s],
+                        mlp_ratio=4,
+                        qkv_bias=True,
+                        qk_scale=None,
+                        attn_drop=0.0,
+                        proj_drop=0.0,
+                        drop_path=dec_drop_path_[i],
+                        norm_layer=nn.LayerNorm if norm_layer is None else norm_layer,
+                        act_layer=act_layer,
+                        pre_norm=pre_norm,
+                        order_index=i % len(self.order),
+                        cpe_indice_key=f"stage{s}",
+                        enable_rpe=enable_rpe,
+                        enable_flash=enable_flash,
+                        upcast_attention=upcast_attention,
+                        upcast_softmax=upcast_softmax,
+                    ),
+                    name=f"block{i}",
+                )
+            self.dec.add(module=dec, name=f"dec{s}")
+
+    def forward(self, point: Point):
+        # Simply route through the constructed PointSequential
+        point = self.dec(point)
+        return point
+
+
 class Embedding(PointModule):
     def __init__(
         self,
