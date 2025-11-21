@@ -514,6 +514,8 @@ class SerializedUnpoolingNoSkip(PointModule):
         point = self.proj(point)
         # Directly lift child features to parent space without skip fusion
         parent.feat = point.feat[inverse]
+        if "sparse_conv_feat" in parent.keys():
+            parent.sparse_conv_feat = parent.sparse_conv_feat.replace_feature(parent.feat)
         if self.traceable:
             parent["unpooling_parent"] = point
         return parent
