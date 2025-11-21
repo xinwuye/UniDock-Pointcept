@@ -75,10 +75,10 @@ model = dict(
 # Optimizer & scheduler
 epoch = 200
 eval_epoch = 200
-optimizer = dict(type="AdamW", lr=0.001, weight_decay=0.01)
+optimizer = dict(type="AdamW", lr=0.0001, weight_decay=0.01)
 scheduler = dict(
     type="OneCycleLR",
-    max_lr=[0.001, 0.0002],
+    max_lr=[0.0001, 0.0002],
     pct_start=0.05,
     anneal_strategy="cos",
     div_factor=10.0,
