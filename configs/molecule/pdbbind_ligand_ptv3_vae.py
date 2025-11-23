@@ -77,16 +77,26 @@ model = dict(
 # Optimizer & scheduler
 epoch = 50
 eval_epoch = 10
-optimizer = dict(type="AdamW", lr=0.0005, weight_decay=0.01)
+# optimizer = dict(type="AdamW", lr=0.0005, weight_decay=0.01)
+# scheduler = dict(
+#     type="OneCycleLR",
+#     max_lr=[0.0005, 0.0005],
+#     pct_start=0.05,
+#     anneal_strategy="cos",
+#     div_factor=10.0,
+#     final_div_factor=1000.0,
+# )
+# param_dicts = [dict(keyword="block", lr=0.0005)]
+optimizer = dict(type="AdamW", lr=0.001, weight_decay=0.01)
 scheduler = dict(
     type="OneCycleLR",
-    max_lr=[0.0005, 0.0005],
+    max_lr=[0.001, 0.001],
     pct_start=0.05,
     anneal_strategy="cos",
     div_factor=10.0,
     final_div_factor=1000.0,
 )
-param_dicts = [dict(keyword="block", lr=0.0005)]
+param_dicts = [dict(keyword="block", lr=0.001)]
 
 # Dataset
 dataset_type = "MoleculeDataset"
