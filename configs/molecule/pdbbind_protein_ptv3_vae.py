@@ -73,8 +73,8 @@ model = dict(
 )
 
 # Optimizer & scheduler
-epoch = 200
-eval_epoch = 200
+epoch = 100
+eval_epoch = 100
 optimizer = dict(type="AdamW", lr=0.0001, weight_decay=0.01)
 scheduler = dict(
     type="OneCycleLR",
@@ -90,7 +90,27 @@ param_dicts = [dict(keyword="block", lr=0.00005)]
 dataset_type = "MoleculeDataset"
 grid_size = 0.5
 
-common_transform = [
+train_transform = [
+    dict(type="CenterShift", apply_z=True),
+    dict(type="RandomRotate", angle=[-1, 1], axis="z", p=1.),
+    dict(type="RandomRotate", angle=[-1, 1], axis="y", p=1.),
+    dict(type="RandomRotate", angle=[-1, 1], axis="x", p=1.),
+    # dict(type="RandomShift", shift=((-0.5, 0.5), (-0.5, 0.5), (-0.5, 0.5))),
+    dict(
+        type="GridSampleAccumulate",
+        grid_size=grid_size,
+        feat_keys=["atom_type"],
+    ),
+    dict(type="CenterShift", apply_z=False),
+    dict(type="ToTensor"),
+    dict(
+        type="Collect",
+        keys=("coord", "grid_coord", "atom_type"),
+        feat_keys=("atom_type",),
+    ),
+]
+
+eval_transform = [
     dict(type="CenterShift", apply_z=True),
     dict(
         type="GridSampleAccumulate",
@@ -113,21 +133,21 @@ data = dict(
         type=dataset_type,
         split="train",
         data_root=data_root,
-        transform=common_transform.copy(),
+        transform=train_transform,
         test_mode=False,
     ),
     val=dict(
         type=dataset_type,
         split="val",
         data_root=data_root,
-        transform=common_transform.copy(),
+        transform=eval_transform,
         test_mode=False,
     ),
     test=dict(
         type=dataset_type,
         split="test",
         data_root=data_root,
-        transform=common_transform.copy(),
+        transform=eval_transform,
         test_mode=False,
     ),
 )
