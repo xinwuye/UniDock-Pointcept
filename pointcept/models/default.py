@@ -340,84 +340,6 @@ class DefaultClassifier(nn.Module):
             return dict(cls_logits=cls_logits)
 
 
-@MODELS.register_module()
-class PointTransformerVAE(nn.Module):
-    """
-    VAE wrapper around PT-v3 that reconstructs coordinates and input features.
-    """
-
-    def __init__(
-        self,
-        backbone_out_channels,
-        feat_channels,
-        latent_dim=64,
-        coord_weight=1.0,
-        feat_weight=1.0,
-        kl_weight=1e-4,
-        backbone=None,
-    ):
-        super().__init__()
-        self.backbone = build_model(backbone)
-        self.mu_head = nn.Linear(backbone_out_channels, latent_dim)
-        self.logvar_head = nn.Linear(backbone_out_channels, latent_dim)
-        self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, latent_dim),
-            nn.GELU(),
-            nn.Linear(latent_dim, latent_dim),
-            nn.GELU(),
-        )
-        self.coord_head = nn.Linear(latent_dim, 3)
-        self.feat_head = nn.Linear(latent_dim, feat_channels)
-        self.coord_weight = coord_weight
-        self.feat_weight = feat_weight
-        self.kl_weight = kl_weight
-
-    def forward(self, input_dict):
-        point = Point(input_dict)
-        point = self.backbone(point)
-        if isinstance(point, Point):
-            while "pooling_parent" in point.keys():
-                assert "pooling_inverse" in point.keys()
-                parent = point.pop("pooling_parent")
-                inverse = point.pop("pooling_inverse")
-                parent.feat = torch.cat([parent.feat, point.feat[inverse]], dim=-1)
-                point = parent
-            feat = point.feat
-        else:
-            feat = point
-
-        mu = self.mu_head(feat)
-        logvar = self.logvar_head(feat)
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        z = mu + eps * std
-
-        hidden = self.decoder(z)
-        recon_coord = self.coord_head(hidden)
-        recon_feat = self.feat_head(hidden)
-
-        coord_target = input_dict["coord"]
-        feat_target = input_dict["atom_type"]
-
-        coord_loss = F.mse_loss(recon_coord, coord_target)
-        feat_loss = F.mse_loss(recon_feat, feat_target)
-        kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
-
-        loss = (
-            self.coord_weight * coord_loss
-            + self.feat_weight * feat_loss
-            + self.kl_weight * kl_loss
-        )
-
-        output = dict(loss=loss)
-        if not self.training:
-            output.update(
-                recon_coord=recon_coord,
-                recon_feat=recon_feat,
-                mu=mu,
-                logvar=logvar,
-            )
-        return output
 
 
 @MODELS.register_module()
@@ -443,6 +365,8 @@ class PointTransformerVAE2(nn.Module):
         kl_weight=1e-4,
         backbone=None,
         decoder_cfg=None,  # dict: enc_channels, dec_channels, dec_depths, dec_num_head, dec_patch_size, plus flags
+        pooling="max",      # one of: "max", "mean", "sum", "gem", "attn"
+        gem_p=3.0,
     ):
         super().__init__()
         self.backbone = build_model(backbone)
@@ -450,10 +374,15 @@ class PointTransformerVAE2(nn.Module):
         self.decoder_in_channels = decoder_in_channels
         self.latent_dim = latent_dim
         self.noise_dim = noise_dim
+        self.pooling = pooling
+        self.gem_p = gem_p
 
         # Latent heads on pooled encoder features
         self.mu_head = nn.Linear(encoder_out_channels, latent_dim)
         self.logvar_head = nn.Linear(encoder_out_channels, latent_dim)
+        # attention pooling scorer (only used when pooling=="attn")
+        if self.pooling == "attn":
+            self.attn_fc = nn.Linear(encoder_out_channels, 1)
 
         # Project repeated latent (+ noise) to decoder input channels
         self.z_to_dec = nn.Sequential(
@@ -507,14 +436,34 @@ class PointTransformerVAE2(nn.Module):
         point = self.backbone.embedding(point)
         point = self.backbone.enc(point)
 
-        # Global pooling (max) over tokens per sample
-        # indptr from offset: pad with leading 0
-        indptr = nn.functional.pad(point.offset, (1, 0))
-        pooled = torch_scatter.segment_csr(
-            src=point.feat,
-            indptr=indptr,
-            reduce="max",
-        )  # [B, C_enc]
+        # Global pooling over tokens per sample (configurable)
+        indptr = nn.functional.pad(point.offset, (1, 0))  # CSR pointer
+        if self.pooling == "max":
+            pooled = torch_scatter.segment_csr(src=point.feat, indptr=indptr, reduce="max")
+        elif self.pooling == "mean":
+            pooled = torch_scatter.segment_csr(src=point.feat, indptr=indptr, reduce="mean")
+        elif self.pooling == "sum":
+            pooled = torch_scatter.segment_csr(src=point.feat, indptr=indptr, reduce="sum")
+        elif self.pooling == "gem":
+            x = torch.clamp(point.feat, min=1e-6)
+            x = x.pow(self.gem_p)
+            pooled = torch_scatter.segment_csr(src=x, indptr=indptr, reduce="mean").pow(1.0 / self.gem_p)
+        elif self.pooling == "attn":
+            # per-sample softmax attention
+            B = (point.offset[-1].item() + 1)
+            pooled_list = []
+            scores = self.attn_fc(point.feat).squeeze(-1)
+            for b in range(B):
+                s, e = indptr[b].item(), indptr[b + 1].item()
+                if e - s == 0:
+                    pooled_list.append(torch.zeros((1, point.feat.size(1)), device=point.feat.device, dtype=point.feat.dtype))
+                    continue
+                w = torch.softmax(scores[s:e], dim=0).unsqueeze(-1)  # (Nb,1)
+                pooled_list.append((w * point.feat[s:e]).sum(dim=0, keepdim=True))
+            pooled = torch.cat(pooled_list, dim=0)
+        else:
+            # default fallback
+            pooled = torch_scatter.segment_csr(src=point.feat, indptr=indptr, reduce="mean")
 
         # Latent parameters & reparameterization
         mu = self.mu_head(pooled)

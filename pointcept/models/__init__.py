@@ -1,5 +1,5 @@
 from .builder import build_model
-from .default import DefaultSegmentor, DefaultClassifier, PointTransformerVAE
+from .default import DefaultSegmentor, DefaultClassifier, PointTransformerVAE2
 from .modules import PointModule, PointModel
 
 # Backbones
