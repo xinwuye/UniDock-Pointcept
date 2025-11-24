@@ -1,7 +1,7 @@
 _base_ = ["../_base_/default_runtime.py"]
 
 # Misc
-batch_size = 256
+batch_size = 512
 num_worker = 8
 mix_prob = 0.0
 empty_cache = False
