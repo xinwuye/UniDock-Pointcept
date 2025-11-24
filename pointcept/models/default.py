@@ -501,3 +501,84 @@ class PointTransformerVAE2(nn.Module):
         if not self.training:
             out.update(recon_coord=recon_coord, recon_feat=recon_feat, mu=mu, logvar=logvar)
         return out
+
+
+@MODELS.register_module()
+class PointTransformerVAE3(nn.Module):
+    """
+    Encoder-decoder without latent pooling: directly use PTv3 encoder token
+    features as the input to a no-skip decoder.
+
+    Differences v.s. VAE2:
+    - No global pooling / mu-logvar / KL; purely reconstruction on tokens.
+    - Project encoder features to decoder input channels, then decode.
+    """
+
+    def __init__(
+        self,
+        feat_channels,
+        coord_weight=1.0,
+        feat_weight=1.0,
+        backbone=None,
+        decoder_cfg=None,
+    ):
+        super().__init__()
+        self.backbone = build_model(backbone)
+        self.coord_weight = coord_weight
+        self.feat_weight = feat_weight
+
+        # Build no-skip decoder if provided
+        self.decoder_noskip = None
+        self.decoder_cfg = decoder_cfg or {}
+        if self.decoder_cfg:
+            self.decoder_noskip = PTv3NoSkipDecoder(
+                enc_channels=self.decoder_cfg.get("enc_channels"),
+                dec_channels=self.decoder_cfg.get("dec_channels"),
+                dec_depths=self.decoder_cfg.get("dec_depths"),
+                dec_num_head=self.decoder_cfg.get("dec_num_head"),
+                dec_patch_size=self.decoder_cfg.get("dec_patch_size"),
+                drop_path=self.decoder_cfg.get("drop_path", 0.0),
+                norm_layer=self.decoder_cfg.get("norm_layer", None),
+                act_layer=self.decoder_cfg.get("act_layer", nn.GELU),
+                pre_norm=self.decoder_cfg.get("pre_norm", True),
+                enable_rpe=self.decoder_cfg.get("enable_rpe", False),
+                enable_flash=self.decoder_cfg.get("enable_flash", True),
+                upcast_attention=self.decoder_cfg.get("upcast_attention", False),
+                upcast_softmax=self.decoder_cfg.get("upcast_softmax", False),
+                order=self.decoder_cfg.get("order", ("z", "z-trans")),
+            )
+
+        # Determine head input channels (decoder top width)
+        dec_out_channels = None
+        if self.decoder_cfg and self.decoder_cfg.get("dec_channels"):
+            dec_out_channels = self.decoder_cfg.get(
+                "dec_out_channels", self.decoder_cfg["dec_channels"][0]
+            )
+        else:
+            dec_out_channels = 64
+        self.coord_head = nn.Linear(dec_out_channels, 3)
+        self.feat_head = nn.Linear(dec_out_channels, feat_channels)
+
+    def forward(self, input_dict):
+        # Build and encode
+        point = Point(input_dict)
+        point.serialization(order=self.backbone.order, shuffle_orders=self.backbone.shuffle_orders)
+        point.sparsify()
+        point = self.backbone.embedding(point)
+        point = self.backbone.enc(point)
+
+        # Decode (no skip)
+        point = self.decoder_noskip(point)
+        dec_feat = point.feat
+
+        # Heads + losses
+        recon_coord = self.coord_head(dec_feat)
+        recon_feat = self.feat_head(dec_feat)
+        coord_loss = F.mse_loss(recon_coord, input_dict["coord"])  # scalar
+        feat_loss = F.mse_loss(recon_feat, input_dict["atom_type"])  # scalar
+        loss = self.coord_weight * coord_loss + self.feat_weight * feat_loss
+
+        out = dict(loss=loss, loss_coord=coord_loss, loss_feat=feat_loss)
+        if not self.training:
+            out.update(recon_coord=recon_coord, recon_feat=recon_feat)
+        return out

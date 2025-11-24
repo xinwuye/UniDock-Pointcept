@@ -1,6 +1,5 @@
 _base_ = ["../_base_/default_runtime.py"]
 
-
 # Misc
 batch_size = 256
 num_worker = 8
@@ -11,22 +10,13 @@ evaluate = True
 
 data_root = "data/pdbbind2020r1/proteins"
 
-# Fixed atom vocabulary size
 num_atom_types = 45
 
-# Model
 model = dict(
-    type="PointTransformerVAE2",
-    encoder_out_channels=512,   # enc_channels[-1]
-    decoder_in_channels=512,    # match decoder top input channels
+    type="PointTransformerVAE3",
     feat_channels=num_atom_types,
-    latent_dim=512,
-    noise_dim=32,
     coord_weight=1.0,
     feat_weight=1.0,
-    kl_weight=1e-4,
-    pooling="mean",   # options: "max", "mean", "sum", "gem", "attn"
-    gem_p=3.0,
     decoder_cfg=dict(
         enc_channels=(32, 64, 128, 256, 512),
         dec_channels=(64, 64, 128, 256),
@@ -51,7 +41,6 @@ model = dict(
         enc_channels=(32, 64, 128, 256, 512),
         enc_num_head=(2, 4, 8, 16, 32),
         enc_patch_size=(256, 256, 256, 256, 256),
-        # Using encoder only; VAE wrapper supplies a no-skip decoder
         mlp_ratio=4,
         qkv_bias=True,
         qk_scale=None,
@@ -74,75 +63,50 @@ model = dict(
     ),
 )
 
-## Optimizer & scheduler (use defaults from _base_)
+epoch = 200
+eval_epoch = 40
+optimizer = dict(type="AdamW", lr=0.0002, weight_decay=0.01)
+scheduler = dict(
+    type="OneCycleLR",
+    max_lr=[0.0002, 0.0001],
+    pct_start=0.05,
+    anneal_strategy="cos",
+    div_factor=10.0,
+    final_div_factor=1000.0,
+)
+param_dicts = [dict(keyword="block", lr=0.0001)]
 
-# Dataset
 dataset_type = "MoleculeDataset"
 grid_size = 0.5
 
 train_transform = [
     dict(type="CenterShift", apply_z=True),
-    dict(type="RandomRotate", angle=[-1, 1], axis="z", p=1.),
-    dict(type="RandomRotate", angle=[-1, 1], axis="y", p=1.),
-    dict(type="RandomRotate", angle=[-1, 1], axis="x", p=1.),
-    # dict(type="RandomShift", shift=((-0.5, 0.5), (-0.5, 0.5), (-0.5, 0.5))),
-    dict(
-        type="GridSampleAccumulate",
-        grid_size=grid_size,
-        feat_keys=["atom_type"],
-    ),
+    dict(type="RandomRotate", angle=[-1, 1], axis="z", p=0.5),
+    dict(type="RandomRotate", angle=[-1, 1], axis="y", p=0.5),
+    dict(type="RandomRotate", angle=[-1, 1], axis="x", p=0.5),
+    dict(type="RandomShift", shift=((-0.5, 0.5), (-0.5, 0.5), (-0.5, 0.5))),
+    dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="CenterShift", apply_z=False),
     dict(type="ToTensor"),
-    dict(
-        type="Collect",
-        keys=("coord", "grid_coord", "atom_type"),
-        feat_keys=("atom_type",),
-    ),
+    dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type",)),
 ]
 
 eval_transform = [
     dict(type="CenterShift", apply_z=True),
-    dict(
-        type="GridSampleAccumulate",
-        grid_size=grid_size,
-        feat_keys=["atom_type"],
-    ),
+    dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="CenterShift", apply_z=False),
     dict(type="ToTensor"),
-    dict(
-        type="Collect",
-        keys=("coord", "grid_coord", "atom_type"),
-        feat_keys=("atom_type",),
-    ),
+    dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type",)),
 ]
 
 data = dict(
     num_atom_types=num_atom_types,
     ignore_index=-1,
-    train=dict(
-        type=dataset_type,
-        split="train",
-        data_root=data_root,
-        transform=train_transform,
-        test_mode=False,
-    ),
-    val=dict(
-        type=dataset_type,
-        split="val",
-        data_root=data_root,
-        transform=eval_transform,
-        test_mode=False,
-    ),
-    test=dict(
-        type=dataset_type,
-        split="test",
-        data_root=data_root,
-        transform=eval_transform,
-        test_mode=False,
-    ),
+    train=dict(type=dataset_type, split="train", data_root=data_root, transform=train_transform, test_mode=False),
+    val=dict(type=dataset_type, split="val", data_root=data_root, transform=eval_transform, test_mode=False),
+    test=dict(type=dataset_type, split="test", data_root=data_root, transform=eval_transform, test_mode=False),
 )
 
-# Hooks - remove semseg evaluator stack
 hooks = [
     dict(type="CheckpointLoader"),
     dict(type="ModelHook"),
