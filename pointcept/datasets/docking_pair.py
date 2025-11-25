@@ -20,6 +20,15 @@ def euler_to_matrix(rots):
     """
     R = np.eye(3, dtype=np.float32)
     for axis, angle in rots:
+        # robustly convert angle to a Python float (handles torch tensors / numpy arrays)
+        try:
+            # torch tensor or numpy scalar/array
+            if hasattr(angle, "item"):
+                angle = float(angle.item())
+            else:
+                angle = float(np.asarray(angle))
+        except Exception:
+            angle = float(angle)
         c, s = np.cos(angle), np.sin(angle)
         if axis == 'x':
             R_axis = np.array([[1,0,0],[0,c,-s],[0,s,c]], dtype=np.float32)
