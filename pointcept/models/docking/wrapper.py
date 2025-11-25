@@ -8,9 +8,10 @@ from pointcept.models.docking.transformer import DockingTransformer
 from pointcept.models.utils.structure import Point
 
 
-def load_backbone(backbone, weight_path):
+def load_backbone(backbone, weight_path, label="backbone"):
     if weight_path is None or not os.path.isfile(weight_path):
-        return
+        print(f"[Docking] No checkpoint for {label}: {weight_path}")
+        return False
     ckpt = torch.load(weight_path, map_location='cpu')
     weight = OrderedDict()
     for k, v in ckpt['state_dict'].items():
@@ -25,6 +26,8 @@ def load_backbone(backbone, weight_path):
         print(f"[Docking] Missing keys: {missing}")
     if len(unexpected) > 0:
         print(f"[Docking] Unexpected keys: {unexpected}")
+    print(f"[Docking] Loaded {label} encoder weights from: {weight_path}")
+    return True
 
 
 @MODELS.register_module()
@@ -43,8 +46,8 @@ class DockingWrapper(nn.Module):
         self.backbone_moved = build_model(backbone_moved)
         self.transformer = DockingTransformer(**transformer)
 
-        load_backbone(self.backbone_fixed, weight_fixed)
-        load_backbone(self.backbone_moved, weight_moved)
+        load_backbone(self.backbone_fixed, weight_fixed, label="fixed")
+        load_backbone(self.backbone_moved, weight_moved, label="moved")
 
         if freeze_backbone:
             for p in self.backbone_fixed.parameters():

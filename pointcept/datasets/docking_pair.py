@@ -86,6 +86,27 @@ class DockingPairDataset(Dataset):
         # Require recorded centers to exist; raise if missing
         cf = fixed['applied_center']
         cm = moved['applied_center']
+        # ensure numpy float arrays for math with Rf (numpy)
+        if not isinstance(cf, np.ndarray):
+            try:
+                import torch
+                if isinstance(cf, torch.Tensor):
+                    cf = cf.detach().cpu().numpy()
+                else:
+                    cf = np.asarray(cf)
+            except Exception:
+                cf = np.asarray(cf)
+        if not isinstance(cm, np.ndarray):
+            try:
+                import torch
+                if isinstance(cm, torch.Tensor):
+                    cm = cm.detach().cpu().numpy()
+                else:
+                    cm = np.asarray(cm)
+            except Exception:
+                cm = np.asarray(cm)
+        cf = cf.astype(np.float32)
+        cm = cm.astype(np.float32)
         t_gt = (Rf @ (cm - cf)).astype(np.float32)
 
         # Convert R_gt to quaternion (w,x,y,z), enforce w>=0 for canonical sign
