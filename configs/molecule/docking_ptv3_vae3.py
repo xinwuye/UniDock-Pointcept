@@ -1,7 +1,7 @@
 _base_ = ["../_base_/default_runtime.py"]
 
 # Misc
-batch_size = 32
+batch_size = 512
 num_worker = 8
 mix_prob = 0.0
 empty_cache = False
@@ -125,17 +125,17 @@ model = dict(
         pdnorm_affine=True,
         pdnorm_conditions=("Ligand",),
     ),
-    transformer=dict(d_model=1024, nhead=8, num_layers=2, pool='mean'),
-    weight_fixed=None,   # set to protein encoder weight path
-    weight_moved=None,   # set to ligand encoder weight path
+    transformer=dict(d_model=1024, nhead=8, num_layers=4, pool='mean'),
+    weight_fixed="exp/molecule/pdbbind2020r1-proteins-ptv3-vae3/model/model_best.pth",
+    weight_moved="exp/molecule/pdbbind2020r1-ligands-ptv3-vae3/model/model_best.pth",
     freeze_backbone=True,
     loss_rot_weight=1.0,
     loss_trans_weight=1.0,
 )
 
 # Training schedule
-epoch = 200
-eval_epoch = 40
+epoch = 50
+eval_epoch = 50
 optimizer = dict(type="AdamW", lr=0.0005, weight_decay=0.01)
 scheduler = dict(
     type="OneCycleLR",
