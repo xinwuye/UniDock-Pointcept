@@ -7,7 +7,7 @@ Usage:
     --config-file configs/molecule/pdbbind_ligand_ptv3_vae3.py \
     --weight exp/molecule/pdbbind2020r1-ligands-ptv3-vae3/model/model_best.pth \
     --data-root data/pdbbind2020r1/ligands \
-    --save-root out/embeddings/pdbbind2020r1/ligand/molecule/pdbbind2020r1-ligands-ptv3-vae3 \
+    --save-root data/embeddings/molecule/pdbbind2020r1-ligands-ptv3-vae3/pdbbind2020r1 \
     --filename moved
 
 Notes:
