@@ -381,7 +381,8 @@ class DockingEvaluator(HookBase):
                 xm = input_dict.get("coord_aug_before_voxel_moved")
                 xm = xm.float()
                 off_m = input_dict.get("offset_pre_moved").int()
-                B = off_m[-1].item() + 1
+                indptr_m = torch.nn.functional.pad(off_m, (1, 0))
+                B = indptr_m.numel() - 1
 
                 # quat (w,x,y,z) -> rotation matrix (B,3,3)
                 def quat_to_mat(q: torch.Tensor) -> torch.Tensor:
@@ -403,8 +404,7 @@ class DockingEvaluator(HookBase):
 
                 Rp = quat_to_mat(qm)  # (B,3,3)
 
-                # Build CSR indptr for moved points
-                indptr_m = torch.nn.functional.pad(off_m, (1, 0))
+                # Build CSR indptr for moved points (already built above)
                 rmsd_list = []
                 for b in range(B):
                     s = indptr_m[b].item()

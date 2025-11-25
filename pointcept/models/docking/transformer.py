@@ -47,8 +47,9 @@ class DockingTransformer(nn.Module):
         Convert flat (N,C) with CSR offset to padded (B, N_max, C) and mask (B, N_max).
         mask=True denotes padded positions to ignore in attention and pooling.
         """
-        B = offset[-1].item() + 1
+        # offset is cumulative counts per sample, len(offset) == B
         indptr = torch.nn.functional.pad(offset, (1, 0))
+        B = offset.numel()
         lengths = (indptr[1:] - indptr[:-1]).tolist()
         N_max = max(lengths) if lengths else 0
         C = feat.size(-1)
