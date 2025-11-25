@@ -19,9 +19,15 @@ Notes:
 import argparse
 import os
 import os.path as osp
+import sys
 import numpy as np
 import torch
 from collections import OrderedDict
+
+ # Add repo root to sys.path so `pointcept` is importable when running from anywhere
+REPO_ROOT = osp.abspath(osp.join(osp.dirname(__file__), ".."))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 
 from pointcept.utils.config import Config
 from pointcept.datasets import build_dataset
@@ -118,4 +124,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
