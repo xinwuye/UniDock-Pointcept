@@ -38,7 +38,7 @@ model = dict(
         type="PT-v3m1",
         in_channels=num_atom_types,
         order=("z", "z-trans"),
-        stride=(2, 2, 2, 2),
+        stride=(2, 2, 2, 1),
         enc_depths=(2, 2, 2, 6, 2),
         # enc_channels=(32, 64, 128, 256, 512),
         enc_channels=(64, 128, 256, 512, 1024),
@@ -68,6 +68,7 @@ model = dict(
 
 epoch = 200
 eval_epoch = 40
+
 optimizer = dict(type="AdamW", lr=0.0005, weight_decay=0.01)
 scheduler = dict(
     type="OneCycleLR",

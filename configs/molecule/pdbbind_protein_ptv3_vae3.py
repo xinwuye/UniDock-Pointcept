@@ -1,7 +1,7 @@
 _base_ = ["../_base_/default_runtime.py"]
 
 # Misc
-batch_size = 512
+batch_size = 256
 num_worker = 8
 mix_prob = 0.0
 empty_cache = False
@@ -38,7 +38,7 @@ model = dict(
         type="PT-v3m1",
         in_channels=num_atom_types,
         order=("z", "z-trans"),
-        stride=(2, 2, 2, 2),
+        stride=(2, 2, 2, 1),
         enc_depths=(2, 2, 2, 6, 2),
         # enc_channels=(32, 64, 128, 256, 512),
         enc_channels=(64, 128, 256, 512, 1024),
