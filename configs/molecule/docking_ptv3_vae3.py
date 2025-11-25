@@ -1,0 +1,126 @@
+_base_ = ["../_base_/default_runtime.py"]
+
+# Misc
+batch_size = 32
+num_worker = 8
+mix_prob = 0.0
+empty_cache = False
+enable_amp = True
+evaluate = True
+
+# Roots
+fixed_root = "data/pdbbind2020r1/proteins"
+moved_root = "data/pdbbind2020r1/ligands"
+
+# Build paired dataset with recorded rigid augments
+grid_size = 0.5
+fixed_train_tf = [
+    dict(type="CenterShiftMoleculeRecord"),
+    dict(type="RandomRotateRecord", angle=[-1, 1], axis="z", p=1.0),
+    dict(type="RandomRotateRecord", angle=[-1, 1], axis="y", p=1.0),
+    dict(type="RandomRotateRecord", angle=[-1, 1], axis="x", p=1.0),
+    dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
+    dict(type="ToTensor"),
+]
+moved_train_tf = fixed_train_tf
+
+fixed_eval_tf = [
+    dict(type="CenterShiftMoleculeRecord"),
+    dict(type="RandomRotateRecord", angle=[-1, 1], axis="z", p=1.0),
+    dict(type="RandomRotateRecord", angle=[-1, 1], axis="y", p=1.0),
+    dict(type="RandomRotateRecord", angle=[-1, 1], axis="x", p=1.0),
+    dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
+    dict(type="ToTensor"),
+]
+moved_eval_tf = fixed_eval_tf
+
+data = dict(
+    train=dict(
+        type="DockingPairDataset",
+        split="train",
+        fixed_root=fixed_root,
+        moved_root=moved_root,
+        fixed_transform=fixed_train_tf,
+        moved_transform=moved_train_tf,
+        test_mode=False,
+    ),
+    val=dict(
+        type="DockingPairDataset",
+        split="val",
+        fixed_root=fixed_root,
+        moved_root=moved_root,
+        fixed_transform=fixed_eval_tf,
+        moved_transform=moved_eval_tf,
+        test_mode=False,
+    ),
+    test=dict(
+        type="DockingPairDataset",
+        split="test",
+        fixed_root=fixed_root,
+        moved_root=moved_root,
+        fixed_transform=fixed_eval_tf,
+        moved_transform=moved_eval_tf,
+        test_mode=False,
+    ),
+)
+
+# Model: two encoders + cross-attn docking head
+model = dict(
+    type="DockingWrapper",
+    backbone_fixed=dict(
+        type="PT-v3m1",
+        in_channels=45,  # proteins
+        order=("z", "z-trans"),
+        stride=(2,2,2,2),
+        enc_depths=(2,2,2,6,2),
+        enc_channels=(32,64,128,256,512),
+        enc_num_head=(2,4,8,16,32),
+        enc_patch_size=(256,256,256,256,256),
+        mlp_ratio=4,
+        qkv_bias=True,
+        drop_path=0.1,
+        pre_norm=True,
+        enable_rpe=False,
+        enable_flash=True,
+        upcast_attention=False,
+        upcast_softmax=False,
+        enc_mode=True,
+    ),
+    backbone_moved=dict(
+        type="PT-v3m1",
+        in_channels=29,  # ligands
+        order=("z", "z-trans"),
+        stride=(2,2,2,2),
+        enc_depths=(2,2,2,6,2),
+        enc_channels=(32,64,128,256,512),
+        enc_num_head=(2,4,8,16,32),
+        enc_patch_size=(256,256,256,256,256),
+        mlp_ratio=4,
+        qkv_bias=True,
+        drop_path=0.1,
+        pre_norm=True,
+        enable_rpe=False,
+        enable_flash=True,
+        upcast_attention=False,
+        upcast_softmax=False,
+        enc_mode=True,
+    ),
+    transformer=dict(d_model=512, nhead=8, num_layers=2, pool='mean'),
+    weight_fixed=None,   # set to protein encoder weight path
+    weight_moved=None,   # set to ligand encoder weight path
+    freeze_backbone=True,
+    loss_rot_weight=1.0,
+    loss_trans_weight=1.0,
+)
+
+# Optimizer & scheduler (use base defaults)
+
+hooks = [
+    dict(type="CheckpointLoader"),
+    dict(type="ModelHook"),
+    dict(type="IterationTimer", warmup_iter=2),
+    dict(type="InformationWriter"),
+    dict(type="CheckpointSaver", save_freq=None),
+]
+
+train = dict(type="DefaultTrainer")

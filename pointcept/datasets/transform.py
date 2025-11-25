@@ -184,6 +184,50 @@ class CenterShift(object):
 
 
 @TRANSFORMS.register_module()
+class CenterShiftRecord(CenterShift):
+    """CenterShift that records the applied center into data_dict['applied_center']."""
+    def __call__(self, data_dict):
+        if "coord" in data_dict.keys():
+            x_min, y_min, z_min = data_dict["coord"].min(axis=0)
+            x_max, y_max, _ = data_dict["coord"].max(axis=0)
+            if self.apply_z:
+                center = np.array([(x_min + x_max) / 2, (y_min + y_max) / 2, z_min], dtype=np.float32)
+            else:
+                center = np.array([(x_min + x_max) / 2, (y_min + y_max) / 2, 0], dtype=np.float32)
+            data_dict["coord"] -= center
+            data_dict["applied_center"] = center.astype(np.float32)
+        return data_dict
+
+
+@TRANSFORMS.register_module()
+class CenterShiftMolecule(object):
+    """
+    Shift coords by per-axis center (x,y,z) using (min+max)/2 for all axes.
+    """
+    def __call__(self, data_dict):
+        if "coord" in data_dict.keys():
+            mins = data_dict["coord"].min(axis=0)
+            maxs = data_dict["coord"].max(axis=0)
+            center = (mins + maxs) / 2.0
+            data_dict["coord"] -= center
+        return data_dict
+
+
+@TRANSFORMS.register_module()
+class CenterShiftMoleculeRecord(object):
+    """
+    CenterShiftMolecule that also records applied center to data_dict['applied_center'].
+    """
+    def __call__(self, data_dict):
+        if "coord" in data_dict.keys():
+            mins = data_dict["coord"].min(axis=0)
+            maxs = data_dict["coord"].max(axis=0)
+            center = ((mins + maxs) / 2.0).astype(np.float32)
+            data_dict["coord"] -= center
+            data_dict["applied_center"] = center
+        return data_dict
+
+@TRANSFORMS.register_module()
 class RandomShift(object):
     def __init__(self, shift=((-0.2, 0.2), (-0.2, 0.2), (0, 0))):
         self.shift = shift
@@ -272,6 +316,68 @@ class RandomRotate(object):
         return data_dict
 
 
+@TRANSFORMS.register_module()
+class RandomRotateRecord(RandomRotate):
+    """
+    Same as RandomRotate, but records the applied angle (radians) and axis
+    into data_dict['applied_rot'] as a list of (axis, angle) tuples.
+    """
+    def __call__(self, data_dict):
+        # Apply with the exact sampled angle we also record, instead of
+        # delegating to parent (which would re-sample internally).
+        if "coord" not in data_dict:
+            return data_dict
+        # Check probability
+        apply = (random.random() <= self.p)
+        if not apply:
+            if "applied_rot" not in data_dict:
+                data_dict["applied_rot"] = []
+            data_dict["applied_rot"].append((self.axis, 0.0))
+            return data_dict
+
+        angle = np.random.uniform(self.angle[0], self.angle[1]) * np.pi
+        rot_cos, rot_sin = np.cos(angle), np.sin(angle)
+        if self.axis == "x":
+            rot_t = np.array([[1, 0, 0], [0, rot_cos, -rot_sin], [0, rot_sin, rot_cos]])
+        elif self.axis == "y":
+            rot_t = np.array([[rot_cos, 0, rot_sin], [0, 1, 0], [-rot_sin, 0, rot_cos]])
+        elif self.axis == "z":
+            rot_t = np.array([[rot_cos, -rot_sin, 0], [rot_sin, rot_cos, 0], [0, 0, 1]])
+        else:
+            raise NotImplementedError
+        # Determine rotation center
+        if self.center is None:
+            x_min, y_min, z_min = data_dict["coord"].min(axis=0)
+            x_max, y_max, z_max = data_dict["coord"].max(axis=0)
+            center = [(x_min + x_max) / 2, (y_min + y_max) / 2, (z_min + z_max) / 2]
+        else:
+            center = self.center
+        # Apply rotation to coord (and normal if exists)
+        data_dict["coord"] -= center
+        data_dict["coord"] = np.dot(data_dict["coord"], np.transpose(rot_t))
+        data_dict["coord"] += center
+        if "normal" in data_dict.keys():
+            data_dict["normal"] = np.dot(data_dict["normal"], np.transpose(rot_t))
+        # Record exact angle
+        if "applied_rot" not in data_dict:
+            data_dict["applied_rot"] = []
+        data_dict["applied_rot"].append((self.axis, float(angle)))
+        return data_dict
+
+
+@TRANSFORMS.register_module()
+class RandomShiftRecord(object):
+    def __init__(self, shift=((-0.2, 0.2), (-0.2, 0.2), (-0, 0))):
+        self.shift = shift
+
+    def __call__(self, data_dict):
+        if "coord" in data_dict.keys():
+            shift_x = np.random.uniform(self.shift[0][0], self.shift[0][1])
+            shift_y = np.random.uniform(self.shift[1][0], self.shift[1][1])
+            shift_z = np.random.uniform(self.shift[2][0], self.shift[2][1])
+            data_dict["coord"] += [shift_x, shift_y, shift_z]
+            data_dict["applied_shift"] = np.array([shift_x, shift_y, shift_z], dtype=np.float32)
+        return data_dict
 @TRANSFORMS.register_module()
 class RandomRotateTargetAngle(object):
     def __init__(
