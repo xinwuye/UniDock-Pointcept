@@ -33,7 +33,7 @@ def euler_to_matrix(rots):
 
 @DATASETS.register_module()
 class DockingPairDataset(Dataset):
-    def __init__(self, split, fixed_root, moved_root, fixed_transform, moved_transform, test_mode=False):
+    def __init__(self, split, fixed_root, moved_root, fixed_transform, moved_transform, test_mode=False, **kwargs):
         super().__init__()
         self.split = split
         self.fixed_root = os.path.join(fixed_root, split)
