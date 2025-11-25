@@ -110,10 +110,17 @@ class DockingWrapper(nn.Module):
         loss_rot = (1.0 - dot * dot).mean()
         loss_trans = self.l1(trans_pred, t)
         loss = self.loss_rot_weight * loss_rot + self.loss_trans_weight * loss_trans
-        return dict(
-            loss=loss,
-            loss_rot=loss_rot,
-            loss_trans=loss_trans,
-            quat_pred=q_pred,
-            trans_pred=trans_pred,
-        )
+        if self.training:
+            return dict(
+                loss=loss,
+                loss_rot=loss_rot,
+                loss_trans=loss_trans,
+            )
+        else:
+            return dict(
+                loss=loss,
+                loss_rot=loss_rot,
+                loss_trans=loss_trans,
+                quat_pred=q_pred,
+                trans_pred=trans_pred,
+            )
