@@ -66,8 +66,16 @@ class DockingWrapper(nn.Module):
 
     def forward(self, input_dict):
         # Expect keys: coord_fixed, atom_type_fixed, coord_moved, atom_type_moved, rot_gt (3x3), trans_gt (3)
-        fixed = dict(coord=input_dict['coord_fixed'], atom_type=input_dict['atom_type_fixed'])
-        moved = dict(coord=input_dict['coord_moved'], atom_type=input_dict['atom_type_moved'])
+        fixed = dict(
+            coord=input_dict['coord_fixed'],
+            atom_type=input_dict['atom_type_fixed'],
+            offset=input_dict.get('offset_fixed'),
+        )
+        moved = dict(
+            coord=input_dict['coord_moved'],
+            atom_type=input_dict['atom_type_moved'],
+            offset=input_dict.get('offset_moved'),
+        )
         # move tensors to same device
         dev = input_dict['coord_fixed'].device
         for d in (fixed, moved):
@@ -77,29 +85,26 @@ class DockingWrapper(nn.Module):
 
         feat_f, off_f = self.encode(self.backbone_fixed, fixed)
         feat_m, off_m = self.encode(self.backbone_moved, moved)
-        rot_pred, trans_pred = self.transformer(feat_f, off_f, feat_m, off_m)
+        rot_raw, trans_pred = self.transformer(feat_f, off_f, feat_m, off_m)
+        # Normalize quaternion prediction to unit norm and canonicalize sign (w>=0)
+        eps = 1e-8
+        q_pred = rot_raw / (rot_raw.norm(dim=-1, keepdim=True) + eps)
+        sign = torch.where(q_pred[:, :1] < 0, -1.0, 1.0)
+        q_pred = q_pred * sign
 
-        # Build gt rotation vector (extract Euler xyz from 3x3); here we use simple approximation via matrix log
-        R = input_dict['rot_gt'].to(dev)
+        # Ground-truth quaternion (w,x,y,z) and translation
+        q_gt = input_dict['quat_gt'].to(dev)
         t = input_dict['trans_gt'].to(dev)
-        # convert rotation matrix to axis-angle then to xyz small-angle approx
-        # trace-based angle
-        B = R.size(0)
-        rot_vec = []
-        for b in range(B):
-            Rb = R[b]
-            angle = torch.acos(torch.clamp((Rb.trace() - 1) / 2, -1 + 1e-6, 1 - 1e-6))
-            if angle.item() < 1e-6:
-                rv = torch.zeros(3, device=dev)
-            else:
-                skew = (Rb - Rb.T) / (2 * torch.sin(angle))
-                rv = angle * torch.tensor([skew[2,1], skew[0,2], skew[1,0]], device=dev)
-            rot_vec.append(rv.unsqueeze(0))
-        rot_vec = torch.cat(rot_vec, dim=0)
 
-        loss_rot = self.l1(rot_pred, rot_vec)
+        # Quaternion geodesic proxy loss: 1 - (|<q_pred, q_gt>|)^2
+        dot = torch.sum(q_pred * q_gt, dim=-1).abs().clamp(0.0, 1.0)
+        loss_rot = (1.0 - dot * dot).mean()
         loss_trans = self.l1(trans_pred, t)
         loss = self.loss_rot_weight * loss_rot + self.loss_trans_weight * loss_trans
-        return dict(loss=loss, loss_rot=loss_rot, loss_trans=loss_trans,
-                    rot_pred=rot_pred, trans_pred=trans_pred)
-
+        return dict(
+            loss=loss,
+            loss_rot=loss_rot,
+            loss_trans=loss_trans,
+            quat_pred=q_pred,
+            trans_pred=trans_pred,
+        )

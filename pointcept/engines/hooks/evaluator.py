@@ -333,6 +333,160 @@ class ReconstructionEvaluator(HookBase):
 
 
 @HOOKS.register_module()
+class DockingEvaluator(HookBase):
+    """Evaluate docking regression: logs val/loss, val/loss_rot, val/loss_trans.
+    Uses model outputs keyed as 'loss', 'loss_rot', 'loss_trans'.
+    """
+    def after_epoch(self):
+        if self.trainer.cfg.evaluate and self.trainer.val_loader is not None:
+            self.eval()
+
+    def eval(self):
+        self.trainer.logger.info(">>>>>>>>>>>>>>>> Start Docking Evaluation >>>>>>>>>>>>>>>>")
+        self.trainer.model.eval()
+        device = torch.device("cuda", torch.cuda.current_device()) if torch.cuda.is_available() else torch.device("cpu")
+        loss_sum = torch.tensor(0.0, device=device)
+        loss_rot_sum = torch.tensor(0.0, device=device)
+        loss_trans_sum = torch.tensor(0.0, device=device)
+        count = torch.tensor(0.0, device=device)
+        for i, input_dict in enumerate(self.trainer.val_loader):
+            for key in input_dict.keys():
+                if isinstance(input_dict[key], torch.Tensor):
+                    input_dict[key] = input_dict[key].cuda(non_blocking=True)
+            with torch.no_grad():
+                output = self.trainer.model(input_dict)
+            l = output["loss"]
+            lr = output.get("loss_rot", 0.0)
+            lt = output.get("loss_trans", 0.0)
+            if isinstance(l, torch.Tensor):
+                l = l.detach().mean()
+            if isinstance(lr, torch.Tensor):
+                lr = lr.detach().mean()
+            if isinstance(lt, torch.Tensor):
+                lt = lt.detach().mean()
+            loss_sum += l
+            loss_rot_sum += lr
+            loss_trans_sum += lt
+            count += 1.0
+            # RMSD metric: apply predicted pose and un-augment fixed; compare to un-augment moved
+            try:
+                # Gather per-batch tensors
+                qm = output.get("quat_pred")  # (B,4) wxyz
+                tp = output.get("trans_pred")  # (B,3)
+                Rf = input_dict.get("R_fixed").float()  # (B,3,3)
+                Rm = input_dict.get("R_moved").float()  # (B,3,3)
+                cf = input_dict.get("center_fixed").float()  # (B,3)
+                cm = input_dict.get("center_moved").float()  # (B,3)
+                xm = input_dict["coord_moved"].float()  # (N,3)
+                off_m = input_dict["offset_moved"].int()
+                B = off_m[-1].item() + 1
+
+                # quat (w,x,y,z) -> rotation matrix (B,3,3)
+                def quat_to_mat(q: torch.Tensor) -> torch.Tensor:
+                    # Pure torch conversion; q is (B,4) in wxyz
+                    q = q / (q.norm(dim=-1, keepdim=True) + 1e-8)
+                    w, x, y, z = q[:, 0], q[:, 1], q[:, 2], q[:, 3]
+                    ww, xx, yy, zz = w * w, x * x, y * y, z * z
+                    wx, wy, wz = w * x, w * y, w * z
+                    xy, xz, yz = x * y, x * z, y * z
+                    R = torch.stack(
+                        [
+                            torch.stack([1 - 2 * (yy + zz), 2 * (xy - wz), 2 * (xz + wy)], dim=-1),
+                            torch.stack([2 * (xy + wz), 1 - 2 * (xx + zz), 2 * (yz - wx)], dim=-1),
+                            torch.stack([2 * (xz - wy), 2 * (yz + wx), 1 - 2 * (xx + yy)], dim=-1),
+                        ],
+                        dim=-2,
+                    )
+                    return R
+
+                Rp = quat_to_mat(qm)  # (B,3,3)
+
+                # Build CSR indptr for moved points
+                indptr_m = torch.nn.functional.pad(off_m, (1, 0))
+                rmsd_list = []
+                for b in range(B):
+                    s = indptr_m[b].item()
+                    e = indptr_m[b+1].item()
+                    if e <= s:
+                        continue
+                    xm_b = xm[s:e]  # (Nb,3)
+                    # Inverse moved augmentation to recover original moved pose: x0 = x_aug @ Rm + cm
+                    X0 = xm_b @ Rm[b] + cm[b]
+                    # Apply predicted pose (left-mul) in row form: Xp = xm @ Rp^T + tp
+                    Xp = xm_b @ Rp[b].T + tp[b]
+                    # Undo fixed augmentation: Xhat = Xp @ Rf + cf
+                    Xhat = Xp @ Rf[b] + cf[b]
+                    # RMSD between Xhat and X0
+                    diff = Xhat - X0
+                    rmsd = torch.sqrt(torch.mean(torch.sum(diff*diff, dim=-1)))
+                    rmsd_list.append(rmsd)
+                if rmsd_list:
+                    rmsd_avg = torch.stack(rmsd_list).mean()
+                    # log instantly for this batch iteration
+                    self.trainer.storage.put_scalar("val_rmsd_iter", float(rmsd_avg))
+                    # accumulate as loss_sum style
+                    # reuse loss_sum to aggregate at epoch end? keep separate local var is clearer
+                    if not hasattr(self, "_rmsd_sum"):
+                        self._rmsd_sum = torch.tensor(0.0, device=device)
+                        self._rmsd_count = torch.tensor(0.0, device=device)
+                    self._rmsd_sum += rmsd_avg
+                    self._rmsd_count += 1.0
+            except Exception as ex:
+                # Safeguard: do not break eval if any key is missing
+                pass
+            self.trainer.logger.info(
+                "Val: [{iter}/{max_iter}] Loss {loss:.4f} Rot {lr:.4f} Trans {lt:.4f}".format(
+                    iter=i + 1,
+                    max_iter=len(self.trainer.val_loader),
+                    loss=float(l),
+                    lr=float(lr),
+                    lt=float(lt),
+                )
+            )
+        if comm.get_world_size() > 1:
+            dist.all_reduce(loss_sum)
+            dist.all_reduce(loss_rot_sum)
+            dist.all_reduce(loss_trans_sum)
+            dist.all_reduce(count)
+        avg_loss = (loss_sum / count).item()
+        avg_rot = (loss_rot_sum / count).item()
+        avg_trans = (loss_trans_sum / count).item()
+        avg_rmsd = None
+        if hasattr(self, "_rmsd_sum") and self._rmsd_count.item() > 0:
+            avg_rmsd = (self._rmsd_sum / self._rmsd_count).item()
+            # reset accumulators
+            self._rmsd_sum = torch.tensor(0.0, device=device)
+            self._rmsd_count = torch.tensor(0.0, device=device)
+
+        current_epoch = self.trainer.epoch + 1
+        if self.trainer.writer is not None:
+            self.trainer.writer.add_scalar("val/loss", avg_loss, current_epoch)
+            self.trainer.writer.add_scalar("val/loss_rot", avg_rot, current_epoch)
+            self.trainer.writer.add_scalar("val/loss_trans", avg_trans, current_epoch)
+            if avg_rmsd is not None:
+                self.trainer.writer.add_scalar("val/rmsd", avg_rmsd, current_epoch)
+            if self.trainer.cfg.enable_wandb:
+                wandb.log(
+                    {
+                        "Epoch": current_epoch,
+                        "val/loss": avg_loss,
+                        "val/loss_rot": avg_rot,
+                        "val/loss_trans": avg_trans,
+                        **({"val/rmsd": avg_rmsd} if avg_rmsd is not None else {}),
+                    },
+                    step=wandb.run.step,
+                )
+        msg = f"Val result: Docking Loss {avg_loss:.4f} (rot {avg_rot:.4f}, trans {avg_trans:.4f})"
+        if avg_rmsd is not None:
+            msg += f", rmsd {avg_rmsd:.4f}"
+        self.trainer.logger.info(msg + ".")
+        # Choose smaller is better so saver tracks min loss
+        self.trainer.comm_info["current_metric_value"] = -avg_loss
+        self.trainer.comm_info["current_metric_name"] = "val_loss"
+        self.trainer.model.train()
+
+
+@HOOKS.register_module()
 class InsSegEvaluator(HookBase):
     def __init__(self, segment_ignore_index=(-1,), instance_ignore_index=-1):
         self.segment_ignore_index = segment_ignore_index

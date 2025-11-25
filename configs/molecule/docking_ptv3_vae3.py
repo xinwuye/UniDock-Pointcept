@@ -71,41 +71,61 @@ model = dict(
         type="PT-v3m1",
         in_channels=45,  # proteins
         order=("z", "z-trans"),
-        stride=(2,2,2,2),
+        stride=(2,2,2,1),
         enc_depths=(2,2,2,6,2),
-        enc_channels=(32,64,128,256,512),
+        enc_channels=(64,128,256,512,1024),
         enc_num_head=(2,4,8,16,32),
         enc_patch_size=(256,256,256,256,256),
         mlp_ratio=4,
         qkv_bias=True,
+        qk_scale=None,
+        attn_drop=0.0,
+        proj_drop=0.0,
         drop_path=0.1,
+        shuffle_orders=True,
         pre_norm=True,
         enable_rpe=False,
         enable_flash=True,
         upcast_attention=False,
         upcast_softmax=False,
         enc_mode=True,
+        pdnorm_bn=False,
+        pdnorm_ln=False,
+        pdnorm_decouple=True,
+        pdnorm_adaptive=False,
+        pdnorm_affine=True,
+        pdnorm_conditions=("Ligand",),
     ),
     backbone_moved=dict(
         type="PT-v3m1",
         in_channels=29,  # ligands
         order=("z", "z-trans"),
-        stride=(2,2,2,2),
+        stride=(2,2,2,1),
         enc_depths=(2,2,2,6,2),
-        enc_channels=(32,64,128,256,512),
+        enc_channels=(64,128,256,512,1024),
         enc_num_head=(2,4,8,16,32),
         enc_patch_size=(256,256,256,256,256),
         mlp_ratio=4,
         qkv_bias=True,
+        qk_scale=None,
+        attn_drop=0.0,
+        proj_drop=0.0,
         drop_path=0.1,
+        shuffle_orders=True,
         pre_norm=True,
         enable_rpe=False,
         enable_flash=True,
         upcast_attention=False,
         upcast_softmax=False,
         enc_mode=True,
+        pdnorm_bn=False,
+        pdnorm_ln=False,
+        pdnorm_decouple=True,
+        pdnorm_adaptive=False,
+        pdnorm_affine=True,
+        pdnorm_conditions=("Ligand",),
     ),
-    transformer=dict(d_model=512, nhead=8, num_layers=2, pool='mean'),
+    transformer=dict(d_model=1024, nhead=8, num_layers=2, pool='mean'),
     weight_fixed=None,   # set to protein encoder weight path
     weight_moved=None,   # set to ligand encoder weight path
     freeze_backbone=True,
@@ -113,13 +133,25 @@ model = dict(
     loss_trans_weight=1.0,
 )
 
-# Optimizer & scheduler (use base defaults)
+# Training schedule
+epoch = 200
+eval_epoch = 40
+optimizer = dict(type="AdamW", lr=0.0005, weight_decay=0.01)
+scheduler = dict(
+    type="OneCycleLR",
+    max_lr=0.0005,
+    pct_start=0.05,
+    anneal_strategy="cos",
+    div_factor=10.0,
+    final_div_factor=1000.0,
+)
 
 hooks = [
     dict(type="CheckpointLoader"),
     dict(type="ModelHook"),
     dict(type="IterationTimer", warmup_iter=2),
     dict(type="InformationWriter"),
+    dict(type="DockingEvaluator"),
     dict(type="CheckpointSaver", save_freq=None),
 ]
 

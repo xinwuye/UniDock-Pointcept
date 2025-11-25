@@ -6,6 +6,7 @@ Applies recorded random rigid transforms and computes GT relative transform (R,t
 import os
 import glob
 import numpy as np
+from scipy.spatial.transform import Rotation as SR
 from copy import deepcopy
 from torch.utils.data import Dataset
 
@@ -69,18 +70,34 @@ class DockingPairDataset(Dataset):
         Rf = euler_to_matrix(rots_f)
         Rm = euler_to_matrix(rots_m)
         R_gt = Rf @ Rm.T
-        # Use recorded centers from CenterShiftRecord: t = Rf * (cf - cm)
+        # Use recorded centers from CenterShiftRecord: t maps moved->fixed in column convention
+        # Derivation (row/right-mul): Yf = Ym (Rm Rf^T) + (cm - cf) Rf^T
+        # Thus in column/left-mul: R_gt = Rf Rm^T, t_gt = Rf (cm - cf)
         cf = fixed.get('applied_center', np.zeros(3, dtype=np.float32))
         cm = moved.get('applied_center', np.zeros(3, dtype=np.float32))
-        t_gt = (Rf @ (cf - cm)).astype(np.float32)
+        t_gt = (Rf @ (cm - cf)).astype(np.float32)
 
+        # Convert R_gt to quaternion (w,x,y,z), enforce w>=0 for canonical sign
+        q_xyzw = SR.from_matrix(R_gt.astype(np.float64)).as_quat().astype(np.float32)  # (x,y,z,w)
+        q_wxyz = np.concatenate([q_xyzw[3:4], q_xyzw[:3]], axis=0)
+        if q_wxyz[0] < 0:
+            q_wxyz = -q_wxyz
+
+        import torch
         out = dict(
             name=name,
             coord_fixed=fixed['coord'],
             atom_type_fixed=fixed['atom_type'],
+            offset_fixed=torch.tensor([fixed['coord'].shape[0]], dtype=torch.int32),
             coord_moved=moved['coord'],
             atom_type_moved=moved['atom_type'],
+            offset_moved=torch.tensor([moved['coord'].shape[0]], dtype=torch.int32),
             rot_gt=R_gt.astype(np.float32),
             trans_gt=t_gt.astype(np.float32),
+            quat_gt=q_wxyz.astype(np.float32),  # (w,x,y,z)
+            R_fixed=Rf.astype(np.float32),
+            R_moved=Rm.astype(np.float32),
+            center_fixed=cf.astype(np.float32),
+            center_moved=cm.astype(np.float32),
         )
         return out
