@@ -7,7 +7,7 @@ Usage:
     --config-file configs/molecule/pdbbind_ligand_ptv3_vae3.py \
     --weight exp/molecule/pdbbind2020r1-ligands-ptv3-vae3/model/model_best.pth \
     --data-root data/pdbbind2020r1/ligands \
-    --save-root data/embeddings/pdbbind2020r1/ligand/molecule/pdbbind2020r1-ligands-ptv3-vae3 \
+    --save-root data/embeddings/molecule/pdbbind2020r1-ligands-ptv3-vae3/pdbbind2020r1 \
     --filename moved
 
 Notes:
@@ -23,6 +23,7 @@ import sys
 import numpy as np
 import torch
 from collections import OrderedDict
+from tqdm import tqdm
 
  # Add repo root to sys.path so `pointcept` is importable when running from anywhere
 REPO_ROOT = osp.abspath(osp.join(osp.dirname(__file__), ".."))
@@ -30,7 +31,7 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from pointcept.utils.config import Config
-from pointcept.datasets import build_dataset
+from pointcept.datasets import build_dataset, collate_fn
 from pointcept.models import build_model
 from pointcept.models.utils.structure import Point
 
@@ -44,6 +45,7 @@ def parse_args():
     ap.add_argument('--filename', required=True, choices=['fixed', 'moved'], help="Output filename (without extension)")
     ap.add_argument('--device', default='cuda', help='cuda or cpu')
     ap.add_argument('--num-workers', type=int, default=4)
+    ap.add_argument('--batch-size', type=int, default=8)
     return ap.parse_args()
 
 
@@ -80,7 +82,7 @@ def encode_backbone(backbone, batch, device):
     point = backbone.embedding(point)
     point = backbone.enc(point)
     # point.feat is encoder deepest token features (N4 x C)
-    return point.feat.detach().cpu().numpy()
+    return point.feat.detach().cpu().numpy(), batch['offset'].detach().cpu().numpy()
 
 
 def ensure_dir(path):
@@ -109,17 +111,30 @@ def main():
         ds_cfg = dict(ds_cfg)
         ds_cfg.update(dict(split=subset, data_root=args.data_root, test_mode=False))
         dataset = build_dataset(ds_cfg)
-        loader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False,
-                                             num_workers=args.num_workers, pin_memory=True, collate_fn=lambda x: x[0])
+        loader = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=args.batch_size,
+            shuffle=False,
+            num_workers=args.num_workers,
+            pin_memory=True,
+            collate_fn=collate_fn,
+        )
 
-        for sample in loader:
-            name = sample['name'] if isinstance(sample['name'], str) else sample['name'][0]
-            emb = encode_backbone(backbone, sample, device)
-            out_dir = osp.join(args.save_root, subset, name)
-            ensure_dir(out_dir)
-            out_path = osp.join(out_dir, f"{args.filename}.npy")
-            np.save(out_path, emb.astype(np.float32))
-            print(f"Saved: {out_path} shape={emb.shape}")
+        for sample in tqdm(loader, total=len(loader), desc=f"{subset}"):
+            names = sample['name']
+            if isinstance(names, str):
+                names = [names]
+            emb, offset = encode_backbone(backbone, sample, device)
+            # Build CSR pointer from offset
+            indptr = np.concatenate([[0], np.cumsum(offset)])
+            assert len(names) == len(offset), "Mismatch between names and offset length"
+            for i, name in enumerate(names):
+                s, e = indptr[i], indptr[i + 1]
+                out_dir = osp.join(args.save_root, subset, name)
+                ensure_dir(out_dir)
+                out_path = osp.join(out_dir, f"{args.filename}.npy")
+                np.save(out_path, emb[s:e].astype(np.float32))
+        print(f"[{subset}] Saved embeddings to {osp.join(args.save_root, subset)}")
 
 
 if __name__ == '__main__':

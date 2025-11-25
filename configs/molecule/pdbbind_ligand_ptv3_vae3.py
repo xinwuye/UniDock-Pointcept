@@ -85,12 +85,10 @@ grid_size = 0.5
 
 train_transform = [
     dict(type="CenterShift", apply_z=True),
-    dict(type="RandomRotate", angle=[-1, 1], axis="z", p=0.5),
-    dict(type="RandomRotate", angle=[-1, 1], axis="y", p=0.5),
-    dict(type="RandomRotate", angle=[-1, 1], axis="x", p=0.5),
-    dict(type="RandomShift", shift=((-0.5, 0.5), (-0.5, 0.5), (-0.5, 0.5))),
+    dict(type="RandomRotate", angle=[-1, 1], axis="z", p=1.),
+    dict(type="RandomRotate", angle=[-1, 1], axis="y", p=1.),
+    dict(type="RandomRotate", angle=[-1, 1], axis="x", p=1.),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
-    dict(type="CenterShift", apply_z=False),
     dict(type="ToTensor"),
     dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type",)),
 ]
@@ -98,7 +96,6 @@ train_transform = [
 eval_transform = [
     dict(type="CenterShift", apply_z=True),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
-    dict(type="CenterShift", apply_z=False),
     dict(type="ToTensor"),
     dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type",)),
 ]
