@@ -74,16 +74,18 @@ class DockingPairDataset(Dataset):
         moved = self.moved_transform(moved)
 
         # Build GT relative transform R,t: move 'moved' to 'fixed'
-        rots_f = fixed.get('applied_rot', [])
-        rots_m = moved.get('applied_rot', [])
+        # Require recorded rotations to exist; raise if missing
+        rots_f = fixed['applied_rot']
+        rots_m = moved['applied_rot']
         Rf = euler_to_matrix(rots_f)
         Rm = euler_to_matrix(rots_m)
         R_gt = Rf @ Rm.T
         # Use recorded centers from CenterShiftRecord: t maps moved->fixed in column convention
         # Derivation (row/right-mul): Yf = Ym (Rm Rf^T) + (cm - cf) Rf^T
         # Thus in column/left-mul: R_gt = Rf Rm^T, t_gt = Rf (cm - cf)
-        cf = fixed.get('applied_center', np.zeros(3, dtype=np.float32))
-        cm = moved.get('applied_center', np.zeros(3, dtype=np.float32))
+        # Require recorded centers to exist; raise if missing
+        cf = fixed['applied_center']
+        cm = moved['applied_center']
         t_gt = (Rf @ (cm - cf)).astype(np.float32)
 
         # Convert R_gt to quaternion (w,x,y,z), enforce w>=0 for canonical sign
