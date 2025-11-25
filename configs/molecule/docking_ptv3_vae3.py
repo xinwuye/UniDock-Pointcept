@@ -13,7 +13,8 @@ fixed_root = "data/pdbbind2020r1/proteins"
 moved_root = "data/pdbbind2020r1/ligands"
 
 # Build paired dataset with recorded rigid augments
-grid_size = 0.5
+# grid_size = 0.5
+grid_size = 0.1
 fixed_train_tf = [
     dict(type="CenterShiftMoleculeRecord"),
     dict(type="RandomRotateRecord", angle=[-1, 1], axis="z", p=1.0),
@@ -128,8 +129,8 @@ model = dict(
         pdnorm_conditions=("Ligand",),
     ),
     transformer=dict(d_model=1024, nhead=8, num_layers=4, pool='mean'),
-    weight_fixed="exp/molecule/pdbbind2020r1-proteins-ptv3-vae3/model/model_best.pth",
-    weight_moved="exp/molecule/pdbbind2020r1-ligands-ptv3-vae3/model/model_best.pth",
+    # weight_fixed="exp/molecule/pdbbind2020r1-proteins-ptv3-vae3/model/model_best.pth",
+    # weight_moved="exp/molecule/pdbbind2020r1-ligands-ptv3-vae3/model/model_best.pth",
     # freeze_backbone=True,
     freeze_backbone=False,
     loss_rot_weight=1.0,
