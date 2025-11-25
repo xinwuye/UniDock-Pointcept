@@ -1,7 +1,7 @@
 _base_ = ["../_base_/default_runtime.py"]
 
 # Misc
-batch_size = 512
+batch_size = 128
 num_worker = 8
 mix_prob = 0.0
 empty_cache = False
@@ -130,7 +130,8 @@ model = dict(
     transformer=dict(d_model=1024, nhead=8, num_layers=4, pool='mean'),
     weight_fixed="exp/molecule/pdbbind2020r1-proteins-ptv3-vae3/model/model_best.pth",
     weight_moved="exp/molecule/pdbbind2020r1-ligands-ptv3-vae3/model/model_best.pth",
-    freeze_backbone=True,
+    # freeze_backbone=True,
+    freeze_backbone=False,
     loss_rot_weight=1.0,
     loss_trans_weight=1.0,
 )
@@ -138,10 +139,10 @@ model = dict(
 # Training schedule
 epoch = 50
 eval_epoch = 50
-optimizer = dict(type="AdamW", lr=0.0005, weight_decay=0.01)
+optimizer = dict(type="AdamW", lr=0.001, weight_decay=0.01)
 scheduler = dict(
     type="OneCycleLR",
-    max_lr=0.0005,
+    max_lr=0.001,
     pct_start=0.05,
     anneal_strategy="cos",
     div_factor=10.0,
