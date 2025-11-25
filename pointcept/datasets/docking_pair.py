@@ -119,11 +119,21 @@ class DockingPairDataset(Dataset):
         out = dict(
             name=name,
             coord_fixed=fixed['coord'],
+            grid_coord_fixed=fixed.get('grid_coord'),
+            coord_aug_before_voxel_fixed=fixed.get('coord_aug_before_voxel'),
             atom_type_fixed=fixed['atom_type'],
             offset_fixed=torch.tensor([fixed['coord'].shape[0]], dtype=torch.int32),
+            offset_pre_fixed=torch.tensor([
+                fixed['coord_aug_before_voxel'].shape[0]
+            ], dtype=torch.int32),
             coord_moved=moved['coord'],
+            grid_coord_moved=moved.get('grid_coord'),
+            coord_aug_before_voxel_moved=moved.get('coord_aug_before_voxel'),
             atom_type_moved=moved['atom_type'],
             offset_moved=torch.tensor([moved['coord'].shape[0]], dtype=torch.int32),
+            offset_pre_moved=torch.tensor([
+                moved['coord_aug_before_voxel'].shape[0]
+            ], dtype=torch.int32),
             rot_gt=R_gt.astype(np.float32),
             trans_gt=t_gt.astype(np.float32),
             quat_gt=q_wxyz.astype(np.float32),  # (w,x,y,z)

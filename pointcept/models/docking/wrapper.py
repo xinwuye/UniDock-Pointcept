@@ -60,6 +60,10 @@ class DockingWrapper(nn.Module):
         self.l1 = nn.SmoothL1Loss()
 
     def encode(self, backbone, batch):
+        # Ensure required keys for Point
+        if 'feat' not in batch and 'atom_type' in batch:
+            batch = dict(batch)
+            batch['feat'] = batch['atom_type']
         point = Point(batch)
         point.serialization(order=backbone.order, shuffle_orders=backbone.shuffle_orders)
         point.sparsify()
@@ -71,11 +75,13 @@ class DockingWrapper(nn.Module):
         # Expect keys: coord_fixed, atom_type_fixed, coord_moved, atom_type_moved, rot_gt (3x3), trans_gt (3)
         fixed = dict(
             coord=input_dict['coord_fixed'],
+            grid_coord=input_dict.get('grid_coord_fixed'),
             atom_type=input_dict['atom_type_fixed'],
             offset=input_dict.get('offset_fixed'),
         )
         moved = dict(
             coord=input_dict['coord_moved'],
+            grid_coord=input_dict.get('grid_coord_moved'),
             atom_type=input_dict['atom_type_moved'],
             offset=input_dict.get('offset_moved'),
         )

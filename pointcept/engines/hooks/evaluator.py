@@ -377,8 +377,10 @@ class DockingEvaluator(HookBase):
                 Rm = input_dict.get("R_moved").float()  # (B,3,3)
                 cf = input_dict.get("center_fixed").float()  # (B,3)
                 cm = input_dict.get("center_moved").float()  # (B,3)
-                xm = input_dict["coord_moved"].float()  # (N,3)
-                off_m = input_dict["offset_moved"].int()
+                # Use pre-voxelized augmented coords for RMSD
+                xm = input_dict.get("coord_aug_before_voxel_moved")
+                xm = xm.float()
+                off_m = input_dict.get("offset_pre_moved").int()
                 B = off_m[-1].item() + 1
 
                 # quat (w,x,y,z) -> rotation matrix (B,3,3)
@@ -409,7 +411,7 @@ class DockingEvaluator(HookBase):
                     e = indptr_m[b+1].item()
                     if e <= s:
                         continue
-                    xm_b = xm[s:e]  # (Nb,3)
+                    xm_b = xm[s:e]  # (Nb,3) pre-voxel augmented coords if available
                     # Inverse moved augmentation to recover original moved pose: x0 = x_aug @ Rm + cm
                     X0 = xm_b @ Rm[b] + cm[b]
                     # Apply predicted pose (left-mul) in row form: Xp = xm @ Rp^T + tp
