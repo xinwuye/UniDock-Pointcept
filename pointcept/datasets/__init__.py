@@ -19,6 +19,7 @@ from .waymo import WaymoDataset
 # object
 from .modelnet import ModelNetDataset
 from .shapenet_part import ShapeNetPartDataset
+from .docking_pair import DockingPairDataset
 from .molecule import MoleculeDataset
 
 # dataloader

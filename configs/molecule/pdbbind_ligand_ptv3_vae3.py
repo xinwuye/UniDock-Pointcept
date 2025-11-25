@@ -84,7 +84,7 @@ dataset_type = "MoleculeDataset"
 grid_size = 0.5
 
 train_transform = [
-    dict(type="CenterShift", apply_z=True),
+    dict(type="CenterShiftMolecule"),
     dict(type="RandomRotate", angle=[-1, 1], axis="z", p=1.),
     dict(type="RandomRotate", angle=[-1, 1], axis="y", p=1.),
     dict(type="RandomRotate", angle=[-1, 1], axis="x", p=1.),
@@ -94,7 +94,7 @@ train_transform = [
 ]
 
 eval_transform = [
-    dict(type="CenterShift", apply_z=True),
+    dict(type="CenterShiftMolecule"),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
     dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type",)),
