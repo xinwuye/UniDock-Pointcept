@@ -21,7 +21,7 @@ fixed_train_tf = [
     dict(type="RandomRotateRecord", angle=[-1, 1], axis="y", p=1.0),
     dict(type="RandomRotateRecord", angle=[-1, 1], axis="x", p=1.0),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
-    # dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
+    dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
 ]
 moved_train_tf = fixed_train_tf
@@ -32,7 +32,7 @@ fixed_eval_tf = [
     dict(type="RandomRotateRecord", angle=[-1, 1], axis="y", p=1.0),
     dict(type="RandomRotateRecord", angle=[-1, 1], axis="x", p=1.0),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
-    # dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
+    dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
 ]
 moved_eval_tf = fixed_eval_tf

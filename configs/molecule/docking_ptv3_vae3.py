@@ -14,7 +14,7 @@ moved_root = "data/pdbbind2020r1/ligands"
 
 # Build paired dataset with recorded rigid augments
 # grid_size = 0.5
-grid_size = 0.1
+grid_size = 0.05
 fixed_train_tf = [
     dict(type="CenterShiftMoleculeRecord"),
     dict(type="RandomRotateRecord", angle=[-1, 1], axis="z", p=1.0),
