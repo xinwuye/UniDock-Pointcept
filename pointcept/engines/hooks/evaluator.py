@@ -487,7 +487,6 @@ class DockingEvaluator(HookBase):
         self.trainer.comm_info["current_metric_name"] = "val_loss"
         self.trainer.model.train()
 
-
 @HOOKS.register_module()
 class InsSegEvaluator(HookBase):
     def __init__(self, segment_ignore_index=(-1,), instance_ignore_index=-1):
@@ -887,3 +886,4 @@ class InsSegEvaluator(HookBase):
             )
             self.trainer.comm_info["current_metric_value"] = all_ap_50  # save for saver
             self.trainer.comm_info["current_metric_name"] = "AP50"  # save for saver
+

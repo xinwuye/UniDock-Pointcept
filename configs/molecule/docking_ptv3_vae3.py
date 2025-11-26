@@ -14,12 +14,14 @@ moved_root = "data/pdbbind2020r1/ligands"
 
 # Build paired dataset with recorded rigid augments
 # grid_size = 0.5
-grid_size = 0.01
+grid_size = 0.05
 fixed_train_tf = [
-    dict(type="CenterShiftMoleculeRecord"),
-    dict(type="RandomRotateRecord", angle=[-1, 1], axis="z", p=1.0),
-    dict(type="RandomRotateRecord", angle=[-1, 1], axis="y", p=1.0),
-    dict(type="RandomRotateRecord", angle=[-1, 1], axis="x", p=1.0),
+    dict(type="ResetAugmentOps"),
+    dict(type="CenterShiftMoleculeRecordSeq"),
+    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="z", p=1.0),
+    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="y", p=1.0),
+    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="x", p=1.0),
+    dict(type="RandomShiftRecordSeq", shift=((-250.0, 250.0), (-250.0, 250.0), (-250.0, 250.0)), p=0.7),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
@@ -27,10 +29,12 @@ fixed_train_tf = [
 moved_train_tf = fixed_train_tf
 
 fixed_eval_tf = [
-    dict(type="CenterShiftMoleculeRecord"),
-    dict(type="RandomRotateRecord", angle=[-1, 1], axis="z", p=1.0),
-    dict(type="RandomRotateRecord", angle=[-1, 1], axis="y", p=1.0),
-    dict(type="RandomRotateRecord", angle=[-1, 1], axis="x", p=1.0),
+    dict(type="ResetAugmentOps"),
+    dict(type="CenterShiftMoleculeRecordSeq"),
+    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="z", p=1.0),
+    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="y", p=1.0),
+    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="x", p=1.0),
+    dict(type="RandomShiftRecordSeq", shift=((-250.0, 250.0), (-250.0, 250.0), (-250.0, 250.0)), p=0.7),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),

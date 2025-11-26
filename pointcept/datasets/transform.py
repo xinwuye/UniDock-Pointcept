@@ -227,6 +227,111 @@ class CenterShiftMoleculeRecord(object):
             data_dict["applied_center"] = center
         return data_dict
 
+
+# ===== Docking-specific sequential augmentation recorders (additive, non-breaking) =====
+@TRANSFORMS.register_module()
+class ResetAugmentOps(object):
+    """Initialize an ordered list to record applied augmentation ops.
+    Use before any *_RecordSeq transforms so the order is preserved per sample.
+    """
+    def __call__(self, data_dict):
+        data_dict["applied_ops"] = []
+        return data_dict
+
+
+@TRANSFORMS.register_module()
+class CenterShiftMoleculeRecordSeq(object):
+    """
+    Same as CenterShiftMoleculeRecord, but also appends an op entry with exact shift
+    to data_dict['applied_ops'] in execution order.
+    Represent shift as x' = x + t (column/left-mul convention), with t = -center.
+    """
+    def __call__(self, data_dict):
+        assert "coord" in data_dict
+        mins = data_dict["coord"].min(axis=0)
+        maxs = data_dict["coord"].max(axis=0)
+        center = ((mins + maxs) / 2.0).astype(np.float32)
+        data_dict["coord"] = data_dict["coord"] - center
+        data_dict["applied_center"] = center
+        # record op sequence
+        ops = data_dict.get("applied_ops")
+        if ops is not None:
+            ops.append(dict(type="shift", t=(-center).astype(np.float32)))
+        return data_dict
+
+
+@TRANSFORMS.register_module()
+class RandomRotateRecordSeq(RandomRotate):
+    """
+    Rotation with recording into applied_ops preserving order. Records the exact
+    angle (radian), axis, and rotation center used. Applies same as RandomRotate.
+    """
+    def __call__(self, data_dict):
+        # probability gate
+        if random.random() > self.p:
+            # still record noop for completeness
+            ops = data_dict.get("applied_ops")
+            if ops is not None:
+                ops.append(dict(type="rotate", angle=0.0, axis=self.axis, center=None))
+            return data_dict
+        angle = np.random.uniform(self.angle[0], self.angle[1]) * np.pi
+        rot_cos, rot_sin = np.cos(angle), np.sin(angle)
+        if self.axis == "x":
+            rot_t = np.array([[1, 0, 0], [0, rot_cos, -rot_sin], [0, rot_sin, rot_cos]], dtype=np.float32)
+        elif self.axis == "y":
+            rot_t = np.array([[rot_cos, 0, rot_sin], [0, 1, 0], [-rot_sin, 0, rot_cos]], dtype=np.float32)
+        elif self.axis == "z":
+            rot_t = np.array([[rot_cos, -rot_sin, 0], [rot_sin, rot_cos, 0], [0, 0, 1]], dtype=np.float32)
+        else:
+            raise NotImplementedError
+        if self.center is None:
+            x_min, y_min, z_min = data_dict["coord"].min(axis=0)
+            x_max, y_max, z_max = data_dict["coord"].max(axis=0)
+            center = np.array([(x_min + x_max) / 2, (y_min + y_max) / 2, (z_min + z_max) / 2], dtype=np.float32)
+        else:
+            center = np.array(self.center, dtype=np.float32)
+        # apply around center
+        data_dict["coord"] = (data_dict["coord"] - center) @ rot_t.T + center
+        if "normal" in data_dict:
+            data_dict["normal"] = data_dict["normal"] @ rot_t.T
+        # record op sequence in column/left-mul convention: x' = R x + (c - R c)
+        ops = data_dict.get("applied_ops")
+        if ops is not None:
+            ops.append(dict(type="rotate", angle=float(angle), axis=self.axis, center=center.astype(np.float32)))
+        # keep legacy applied_rot as well for compatibility
+        if "applied_rot" not in data_dict:
+            data_dict["applied_rot"] = []
+        data_dict["applied_rot"].append((self.axis, float(angle)))
+        return data_dict
+
+
+@TRANSFORMS.register_module()
+class RandomShiftRecordSeq(object):
+    """
+    Random shift with recording into applied_ops preserving order.
+    Applies x' = x + t where t is sampled per axis from provided ranges.
+    """
+    def __init__(self, shift=((-0.2, 0.2), (-0.2, 0.2), (0.0, 0.0)), p=1.0):
+        self.shift = shift
+        self.p = p
+
+    def __call__(self, data_dict):
+        if random.random() > self.p:
+            # optionally record a no-op
+            ops = data_dict.get("applied_ops")
+            if ops is not None:
+                ops.append(dict(type="shift", t=np.zeros(3, dtype=np.float32)))
+            return data_dict
+        tx = np.random.uniform(self.shift[0][0], self.shift[0][1])
+        ty = np.random.uniform(self.shift[1][0], self.shift[1][1])
+        tz = np.random.uniform(self.shift[2][0], self.shift[2][1])
+        t = np.array([tx, ty, tz], dtype=np.float32)
+        data_dict["coord"] = data_dict["coord"] + t
+        ops = data_dict.get("applied_ops")
+        if ops is not None:
+            ops.append(dict(type="shift", t=t))
+        return data_dict
+
 @TRANSFORMS.register_module()
 class RandomShift(object):
     def __init__(self, shift=((-0.2, 0.2), (-0.2, 0.2), (0, 0))):

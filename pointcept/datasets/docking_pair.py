@@ -73,41 +73,80 @@ class DockingPairDataset(Dataset):
         fixed = self.fixed_transform(fixed)
         moved = self.moved_transform(moved)
 
-        # Build GT relative transform R,t: move 'moved' to 'fixed'
-        # Require recorded rotations to exist; raise if missing
-        rots_f = fixed['applied_rot']
-        rots_m = moved['applied_rot']
-        Rf = euler_to_matrix(rots_f)
-        Rm = euler_to_matrix(rots_m)
-        R_gt = Rf @ Rm.T
-        # Use recorded centers from CenterShiftRecord: t maps moved->fixed in column convention
-        # Derivation (row/right-mul): Yf = Ym (Rm Rf^T) + (cm - cf) Rf^T
-        # Thus in column/left-mul: R_gt = Rf Rm^T, t_gt = Rf (cm - cf)
-        # Require recorded centers to exist; raise if missing
-        cf = fixed['applied_center']
-        cm = moved['applied_center']
-        # ensure numpy float arrays for math with Rf (numpy)
-        if not isinstance(cf, np.ndarray):
-            try:
-                import torch
-                if isinstance(cf, torch.Tensor):
-                    cf = cf.detach().cpu().numpy()
+        # Build GT relative transform R,t: move 'moved' to 'fixed'. Prefer new sequential op records if available
+        def compose_ops(ops):
+            """Compose a list of ops (in applied order) into a single affine transform x' = R x + t.
+            Ops entries: {'type': 'shift', 't': (3,)}, or {'type':'rotate','axis':..., 'angle':..., 'center':(3,)}
+            Returns R (3,3) float32, t (3,) float32 in column/left-mul convention.
+            """
+            R = np.eye(3, dtype=np.float32)
+            t = np.zeros(3, dtype=np.float32)
+            for op in ops:
+                typ = op.get('type')
+                if typ == 'shift':
+                    tt = op['t']
+                    tt = tt.detach().cpu().numpy() if hasattr(tt, 'detach') else np.asarray(tt, dtype=np.float32)
+                    # compose: x' = (R x + t) + tt => R, t <- R, t+tt
+                    t = t + tt.astype(np.float32)
+                elif typ == 'rotate':
+                    angle = op['angle']
+                    angle = float(angle.item()) if hasattr(angle, 'item') else float(angle)
+                    axis = op['axis']
+                    c = op['center']
+                    if c is None:
+                        c = np.zeros(3, dtype=np.float32)
+                    c = c.detach().cpu().numpy() if hasattr(c, 'detach') else np.asarray(c, dtype=np.float32)
+                    ca, sa = np.cos(angle), np.sin(angle)
+                    if axis == 'x':
+                        Rop = np.array([[1,0,0],[0,ca,-sa],[0,sa,ca]], dtype=np.float32)
+                    elif axis == 'y':
+                        Rop = np.array([[ca,0,sa],[0,1,0],[-sa,0,ca]], dtype=np.float32)
+                    else:
+                        Rop = np.array([[ca,-sa,0],[sa,ca,0],[0,0,1]], dtype=np.float32)
+                    top = c - Rop @ c
+                    # compose: x' = Rop (R x + t) + top = (Rop R) x + (Rop t + top)
+                    t = (Rop @ t) + top
+                    R = Rop @ R
                 else:
+                    continue
+            return R.astype(np.float32), t.astype(np.float32)
+
+        # if 'applied_ops' in fixed and 'applied_ops' in moved:
+        if True:
+            Rf, tf = compose_ops(fixed['applied_ops'])
+            Rm, tm = compose_ops(moved['applied_ops'])
+            R_gt = Rf @ Rm.T
+            t_gt = (tf - R_gt @ tm).astype(np.float32)
+        else:
+            # Legacy fallback: use applied_rot + applied_center
+            rots_f = fixed['applied_rot']
+            rots_m = moved['applied_rot']
+            Rf = euler_to_matrix(rots_f)
+            Rm = euler_to_matrix(rots_m)
+            R_gt = Rf @ Rm.T
+            cf = fixed['applied_center']
+            cm = moved['applied_center']
+            if not isinstance(cf, np.ndarray):
+                try:
+                    import torch
+                    if isinstance(cf, torch.Tensor):
+                        cf = cf.detach().cpu().numpy()
+                    else:
+                        cf = np.asarray(cf)
+                except Exception:
                     cf = np.asarray(cf)
-            except Exception:
-                cf = np.asarray(cf)
-        if not isinstance(cm, np.ndarray):
-            try:
-                import torch
-                if isinstance(cm, torch.Tensor):
-                    cm = cm.detach().cpu().numpy()
-                else:
+            if not isinstance(cm, np.ndarray):
+                try:
+                    import torch
+                    if isinstance(cm, torch.Tensor):
+                        cm = cm.detach().cpu().numpy()
+                    else:
+                        cm = np.asarray(cm)
+                except Exception:
                     cm = np.asarray(cm)
-            except Exception:
-                cm = np.asarray(cm)
-        cf = cf.astype(np.float32)
-        cm = cm.astype(np.float32)
-        t_gt = (Rf @ (cm - cf)).astype(np.float32)
+            cf = cf.astype(np.float32)
+            cm = cm.astype(np.float32)
+            t_gt = (Rf @ (cm - cf)).astype(np.float32)
 
         # Convert R_gt to quaternion (w,x,y,z), enforce w>=0 for canonical sign
         q_xyzw = SR.from_matrix(R_gt.astype(np.float64)).as_quat().astype(np.float32)  # (x,y,z,w)
