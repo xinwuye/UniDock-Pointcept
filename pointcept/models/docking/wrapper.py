@@ -93,6 +93,13 @@ class DockingWrapper(nn.Module):
                     d[k] = d[k].to(dev)
 
         feat_f, off_f = self.encode(self.backbone_fixed, fixed)
+        # Debug: print moved coords shape before encoding
+        try:
+            mc = moved.get('coord')
+            if isinstance(mc, torch.Tensor):
+                print(f"[Docking] moved coord shape: {tuple(mc.shape)}")
+        except Exception:
+            pass
         feat_m, off_m = self.encode(self.backbone_moved, moved)
         rot_raw, trans_pred = self.transformer(feat_f, off_f, feat_m, off_m)
         # Normalize quaternion prediction to unit norm and canonicalize sign (w>=0)
