@@ -14,7 +14,7 @@ moved_root = "data/pdbbind2020r1/ligands"
 
 # Build paired dataset with recorded rigid augments
 # grid_size = 0.5
-grid_size = 0.05
+grid_size = 0.01
 fixed_train_tf = [
     dict(type="CenterShiftMoleculeRecord"),
     dict(type="RandomRotateRecord", angle=[-1, 1], axis="z", p=1.0),
@@ -140,10 +140,10 @@ model = dict(
 # Training schedule
 epoch = 50
 eval_epoch = 50
-optimizer = dict(type="AdamW", lr=0.001, weight_decay=0.01)
+optimizer = dict(type="AdamW", lr=0.0001, weight_decay=0.01)
 scheduler = dict(
     type="OneCycleLR",
-    max_lr=0.001,
+    max_lr=0.0001,
     pct_start=0.05,
     anneal_strategy="cos",
     div_factor=10.0,

@@ -59,7 +59,7 @@ class DockingTransformer(nn.Module):
         for b in range(B):
             s, e = indptr[b].item(), indptr[b + 1].item()
             n = e - s
-            if n > 0:
+            if n >= 0:
                 x_pad[b, :n] = feat[s:e]
                 mask[b, :n] = False
         return x_pad, mask
