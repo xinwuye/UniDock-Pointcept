@@ -178,7 +178,7 @@ class DockingPairDataset(Dataset):
             quat_gt=q_wxyz.astype(np.float32),  # (w,x,y,z)
             R_fixed=Rf.astype(np.float32),
             R_moved=Rm.astype(np.float32),
-            center_fixed=cf.astype(np.float32),
-            center_moved=cm.astype(np.float32),
+            t_fixed=tf.astype(np.float32),
+            t_moved=tm.astype(np.float32),
         )
         return out

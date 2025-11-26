@@ -375,8 +375,8 @@ class DockingEvaluator(HookBase):
                 tp = output.get("trans_pred")  # (B,3)
                 Rf = input_dict.get("R_fixed").float()  # (B,3,3)
                 Rm = input_dict.get("R_moved").float()  # (B,3,3)
-                cf = input_dict.get("center_fixed").float()  # (B,3)
-                cm = input_dict.get("center_moved").float()  # (B,3)
+                tf = input_dict.get("t_fixed").float()  # (B,3)
+                tm = input_dict.get("t_moved").float()  # (B,3)
                 # Use pre-voxelized augmented coords for RMSD
                 xm = input_dict.get("coord_aug_before_voxel_moved")
                 xm = xm.float()
@@ -412,12 +412,12 @@ class DockingEvaluator(HookBase):
                     if e <= s:
                         continue
                     xm_b = xm[s:e]  # (Nb,3) pre-voxel augmented coords if available
-                    # Inverse moved augmentation to recover original moved pose: x0 = x_aug @ Rm + cm
-                    X0 = xm_b @ Rm[b] + cm[b]
+                    # Inverse moved augmentation using composed (R_moved, t_moved): x0 = (x_aug - t_moved) @ R_moved
+                    X0 = (xm_b - tm[b]) @ Rm[b]
                     # Apply predicted pose (left-mul) in row form: Xp = xm @ Rp^T + tp
                     Xp = xm_b @ Rp[b].T + tp[b]
-                    # Undo fixed augmentation: Xhat = Xp @ Rf + cf
-                    Xhat = Xp @ Rf[b] + cf[b]
+                    # Undo fixed augmentation: x = (x_aug - t_fixed) @ R_fixed
+                    Xhat = (Xp - tf[b]) @ Rf[b]
                     # RMSD between Xhat and X0
                     diff = Xhat - X0
                     rmsd = torch.sqrt(torch.mean(torch.sum(diff*diff, dim=-1)))
@@ -886,4 +886,3 @@ class InsSegEvaluator(HookBase):
             )
             self.trainer.comm_info["current_metric_value"] = all_ap_50  # save for saver
             self.trainer.comm_info["current_metric_name"] = "AP50"  # save for saver
-

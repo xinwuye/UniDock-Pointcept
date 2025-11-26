@@ -414,10 +414,6 @@ class RandomRotateRecordSeq(RandomRotate):
         ops = data_dict.get("applied_ops")
         if ops is not None:
             ops.append(dict(type="rotate", angle=float(angle), axis=self.axis, center=center.astype(np.float32)))
-        # keep legacy applied_rot as well for compatibility
-        if "applied_rot" not in data_dict:
-            data_dict["applied_rot"] = []
-        data_dict["applied_rot"].append((self.axis, float(angle)))
         return data_dict
 
 
