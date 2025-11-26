@@ -261,51 +261,6 @@ class CenterShiftMoleculeRecordSeq(object):
 
 
 @TRANSFORMS.register_module()
-class RandomRotateRecordSeq(RandomRotate):
-    """
-    Rotation with recording into applied_ops preserving order. Records the exact
-    angle (radian), axis, and rotation center used. Applies same as RandomRotate.
-    """
-    def __call__(self, data_dict):
-        # probability gate
-        if random.random() > self.p:
-            # still record noop for completeness
-            ops = data_dict.get("applied_ops")
-            if ops is not None:
-                ops.append(dict(type="rotate", angle=0.0, axis=self.axis, center=None))
-            return data_dict
-        angle = np.random.uniform(self.angle[0], self.angle[1]) * np.pi
-        rot_cos, rot_sin = np.cos(angle), np.sin(angle)
-        if self.axis == "x":
-            rot_t = np.array([[1, 0, 0], [0, rot_cos, -rot_sin], [0, rot_sin, rot_cos]], dtype=np.float32)
-        elif self.axis == "y":
-            rot_t = np.array([[rot_cos, 0, rot_sin], [0, 1, 0], [-rot_sin, 0, rot_cos]], dtype=np.float32)
-        elif self.axis == "z":
-            rot_t = np.array([[rot_cos, -rot_sin, 0], [rot_sin, rot_cos, 0], [0, 0, 1]], dtype=np.float32)
-        else:
-            raise NotImplementedError
-        if self.center is None:
-            x_min, y_min, z_min = data_dict["coord"].min(axis=0)
-            x_max, y_max, z_max = data_dict["coord"].max(axis=0)
-            center = np.array([(x_min + x_max) / 2, (y_min + y_max) / 2, (z_min + z_max) / 2], dtype=np.float32)
-        else:
-            center = np.array(self.center, dtype=np.float32)
-        # apply around center
-        data_dict["coord"] = (data_dict["coord"] - center) @ rot_t.T + center
-        if "normal" in data_dict:
-            data_dict["normal"] = data_dict["normal"] @ rot_t.T
-        # record op sequence in column/left-mul convention: x' = R x + (c - R c)
-        ops = data_dict.get("applied_ops")
-        if ops is not None:
-            ops.append(dict(type="rotate", angle=float(angle), axis=self.axis, center=center.astype(np.float32)))
-        # keep legacy applied_rot as well for compatibility
-        if "applied_rot" not in data_dict:
-            data_dict["applied_rot"] = []
-        data_dict["applied_rot"].append((self.axis, float(angle)))
-        return data_dict
-
-
-@TRANSFORMS.register_module()
 class RandomShiftRecordSeq(object):
     """
     Random shift with recording into applied_ops preserving order.
@@ -419,6 +374,52 @@ class RandomRotate(object):
         if "normal" in data_dict.keys():
             data_dict["normal"] = np.dot(data_dict["normal"], np.transpose(rot_t))
         return data_dict
+
+
+@TRANSFORMS.register_module()
+class RandomRotateRecordSeq(RandomRotate):
+    """
+    Rotation with recording into applied_ops preserving order. Records the exact
+    angle (radian), axis, and rotation center used. Applies same as RandomRotate.
+    """
+    def __call__(self, data_dict):
+        # probability gate
+        if random.random() > self.p:
+            # still record noop for completeness
+            ops = data_dict.get("applied_ops")
+            if ops is not None:
+                ops.append(dict(type="rotate", angle=0.0, axis=self.axis, center=None))
+            return data_dict
+        angle = np.random.uniform(self.angle[0], self.angle[1]) * np.pi
+        rot_cos, rot_sin = np.cos(angle), np.sin(angle)
+        if self.axis == "x":
+            rot_t = np.array([[1, 0, 0], [0, rot_cos, -rot_sin], [0, rot_sin, rot_cos]], dtype=np.float32)
+        elif self.axis == "y":
+            rot_t = np.array([[rot_cos, 0, rot_sin], [0, 1, 0], [-rot_sin, 0, rot_cos]], dtype=np.float32)
+        elif self.axis == "z":
+            rot_t = np.array([[rot_cos, -rot_sin, 0], [rot_sin, rot_cos, 0], [0, 0, 1]], dtype=np.float32)
+        else:
+            raise NotImplementedError
+        if self.center is None:
+            x_min, y_min, z_min = data_dict["coord"].min(axis=0)
+            x_max, y_max, z_max = data_dict["coord"].max(axis=0)
+            center = np.array([(x_min + x_max) / 2, (y_min + y_max) / 2, (z_min + z_max) / 2], dtype=np.float32)
+        else:
+            center = np.array(self.center, dtype=np.float32)
+        # apply around center
+        data_dict["coord"] = (data_dict["coord"] - center) @ rot_t.T + center
+        if "normal" in data_dict:
+            data_dict["normal"] = data_dict["normal"] @ rot_t.T
+        # record op sequence in column/left-mul convention: x' = R x + (c - R c)
+        ops = data_dict.get("applied_ops")
+        if ops is not None:
+            ops.append(dict(type="rotate", angle=float(angle), axis=self.axis, center=center.astype(np.float32)))
+        # keep legacy applied_rot as well for compatibility
+        if "applied_rot" not in data_dict:
+            data_dict["applied_rot"] = []
+        data_dict["applied_rot"].append((self.axis, float(angle)))
+        return data_dict
+
 
 
 @TRANSFORMS.register_module()
