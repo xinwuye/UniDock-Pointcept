@@ -68,7 +68,7 @@ class DockingTransformer(nn.Module):
         # Build padded batches
         xf, mask_f = self._pad_batch(feat_fixed, offset_fixed)
         xm, mask_m = self._pad_batch(feat_moved, offset_moved)
-        
+        print('shape of xm: ', xm.shape)
         # Cross-attention with padding masks, parallel update without weight sharing
         for layer_f, layer_m in zip(self.layers_fixed, self.layers_moved):
             # Parallel computation: compute new states based on current states
