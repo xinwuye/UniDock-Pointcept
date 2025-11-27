@@ -9,6 +9,16 @@ from pointcept.models.docking.transformer import DockingTransformer, DockingTran
 from pointcept.models.utils.structure import Point
 
 
+def axis_angle_to_quat(omega):
+    # omega: (..., 3) axis-angle 向量，长度 = 旋转角度，方向 = 旋转轴
+    theta = omega.norm(dim=-1, keepdim=True)          # (..., 1)
+    axis = omega / (theta + 1e-8)                     # (..., 3)
+    half = 0.5 * theta
+    w = torch.cos(half)                               # (..., 1)
+    xyz = axis * torch.sin(half)                      # (..., 3)
+    return torch.cat([w, xyz], dim=-1)                # (..., 4), [w, x, y, z]
+
+
 def load_backbone(backbone, weight_path, label="backbone"):
     if weight_path is None or not os.path.isfile(weight_path):
         print(f"[Docking] No checkpoint for {label}: {weight_path}")
@@ -321,17 +331,27 @@ class DockingWrapperFlow(nn.Module):
         # Target Velocity: v = X_1 - X_0
         v_trans_target = t_gt - t_noise
         
-        # --- Rotation Flow (SO(3) Geodesic Flow) ---
-        # 1. Sample random quaternion on S^3
-        q_noise = torch.randn_like(q_gt)
-        q_noise = q_noise / (q_noise.norm(dim=-1, keepdim=True) + 1e-8)
+        # # --- Rotation Flow (SO(3) Geodesic Flow) ---
+        # # 1. Sample random quaternion on S^3
+        # q_noise = torch.randn_like(q_gt)
+        # q_noise = q_noise / (q_noise.norm(dim=-1, keepdim=True) + 1e-8)
         
-        # 2. Enforce shortest path (same hemisphere)
-        dot = torch.sum(q_noise * q_gt, dim=-1, keepdim=True)
-        q_noise = q_noise * torch.sign(dot)
+        # # 2. Enforce shortest path (same hemisphere)
+        # dot = torch.sum(q_noise * q_gt, dim=-1, keepdim=True)
+        # q_noise = q_noise * torch.sign(dot)
         
-        # 3. SLERP Interpolation for state q_t
-        q_t = q_slerp(q_noise, q_gt, t)
+        # # 3. SLERP Interpolation for state q_t
+        # q_t = q_slerp(q_noise, q_gt, t)
+
+        # --- Rotation Flow (SO(3) Geodesic Flow, small-angle noise) ---
+        B = q_gt.shape[0]
+        sigma_rot = 0.5  # 弧度，约 30°，可以自己调大/调小
+
+        # 1. 在切空间（axis-angle）上采样高斯噪声
+        omega_noise = sigma_rot * torch.randn(B, 3, device=dev)  # (B, 3)
+
+        # 2. 把 axis-angle 噪声映射成四元数（绕 identity 的小旋转）
+        q_noise = axis_angle_to_quat(omega_noise)  # (B, 4)
         
         # 4. Target Velocity (Angular Velocity in SO(3) tangent space)
         # Compute relative rotation: q_rel = q_noise^{-1} * q_gt
