@@ -30,7 +30,8 @@ class DockingTransformer(nn.Module):
     def __init__(self, d_model=512, nhead=8, num_layers=2, pool='mean'):
         super().__init__()
         # Use separate layers for fixed and moved streams to avoid weight sharing
-        self.layers_fixed = nn.ModuleList([CrossBlock(d_model, nhead) for _ in range(num_layers)])
+        # Fixed stream only needs N-1 layers because the N-th layer output is unused
+        self.layers_fixed = nn.ModuleList([CrossBlock(d_model, nhead) for _ in range(num_layers - 1)])
         self.layers_moved = nn.ModuleList([CrossBlock(d_model, nhead) for _ in range(num_layers)])
         self.pool = pool
         # Output: 4 for quaternion (w,x,y,z) + 3 for translation
@@ -72,21 +73,24 @@ class DockingTransformer(nn.Module):
         xm, mask_m = self._pad_batch(feat_moved, offset_moved)
         print('shape of xf: ', xf.shape)
         print('shape of xm: ', xm.shape)
-        # Cross-attention with padding masks, parallel update without weight sharing
-        for i, (layer_f, layer_m) in enumerate(zip(self.layers_fixed, self.layers_moved)):
-            # Parallel computation: compute new states based on current states
-            # We only need to update xf if it's used in the next layer or output
-            # Since we only use zm for output, we can skip updating xf in the last layer
-            is_last_layer = (i == len(self.layers_fixed) - 1)
+        
+        # Cross-attention with padding masks
+        # Iterate through layers. layers_moved has 1 more layer than layers_fixed
+        num_common_layers = len(self.layers_fixed)
+        
+        # 1. Run common layers (both update)
+        for i in range(num_common_layers):
+            layer_f = self.layers_fixed[i]
+            layer_m = self.layers_moved[i]
             
-            if not is_last_layer:
-                xf_new = layer_f(xf, xm, mask_kv=mask_m)
-            else:
-                xf_new = xf # No need to update xf in last layer if unused
-                
+            xf_new = layer_f(xf, xm, mask_kv=mask_m)
             xm_new = layer_m(xm, xf, mask_kv=mask_f)
-            # Update states simultaneously
+            
             xf, xm = xf_new, xm_new
+            
+        # 2. Run the last moved layer (only xm updates, using previous xf)
+        last_layer_m = self.layers_moved[-1]
+        xm = last_layer_m(xm, xf, mask_kv=mask_f)
             
         # Masked mean pooling per sample
         def masked_mean(x, mask):
