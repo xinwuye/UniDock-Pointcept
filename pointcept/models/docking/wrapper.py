@@ -416,11 +416,18 @@ class DockingWrapperFlow(nn.Module):
         
         loss = self.loss_rot_weight * loss_rot + self.loss_trans_weight * loss_trans
         
-        return dict(
-            loss=loss,
-            loss_rot=loss_rot,
-            loss_trans=loss_trans,
-            v_rot_pred=v_rot_pred,
-            v_trans_pred=v_trans_pred,
-            t=t
-        )
+        if self.training:
+            return dict(
+                loss=loss,
+                loss_rot=loss_rot,
+                loss_trans=loss_trans,
+            )
+        else:
+            return dict(
+                loss=loss,
+                loss_rot=loss_rot,
+                loss_trans=loss_trans,
+                v_rot_pred=v_rot_pred,
+                v_trans_pred=v_trans_pred,
+                t=t
+            )
