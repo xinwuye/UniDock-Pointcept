@@ -1,7 +1,7 @@
 _base_ = ["../_base_/default_runtime.py"]
 
 # Misc
-batch_size = 16
+batch_size = 512
 num_worker = 8
 mix_prob = 0.0
 empty_cache = False
@@ -145,10 +145,10 @@ model = dict(
 # Training schedule
 epoch = 50
 eval_epoch = 50
-optimizer = dict(type="AdamW", lr=0.0001, weight_decay=0.01)
+optimizer = dict(type="AdamW", lr=0.0005, weight_decay=0.01)
 scheduler = dict(
     type="OneCycleLR",
-    max_lr=0.0001,
+    max_lr=0.0005,
     pct_start=0.05,
     anneal_strategy="cos",
     div_factor=10.0,
