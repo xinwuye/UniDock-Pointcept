@@ -74,9 +74,9 @@ def q_to_axis_angle(q):
     
     # Use small epsilon to avoid div by zero
     eps = 1e-6
-    scale = torch.where(norm_xyz < eps, 
-                        2.0 / w.unsqueeze(-1).clamp(min=eps), # Approx for small angle
-                        theta / norm_xyz)
+    scale = torch.where((norm_xyz < eps).squeeze(-1),
+                        2.0 / w.clamp(min=eps), # Approx for small angle
+                        theta.squeeze(-1) / norm_xyz.squeeze(-1)).unsqueeze(-1)
     
     xi = scale * xyz
     return xi
