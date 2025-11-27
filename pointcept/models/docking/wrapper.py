@@ -63,7 +63,7 @@ def q_to_axis_angle(q):
     # but with 0 <= theta <= pi
     sign = torch.where(w < 0, -1.0, 1.0)
     w = w * sign
-    xyz = xyz * sign
+    xyz = xyz * sign.unsqueeze(-1)
     
     # 2. Angle computation
     # theta = 2 * atan2(|xyz|, w)
