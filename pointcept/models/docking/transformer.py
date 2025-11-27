@@ -73,17 +73,9 @@ class DockingTransformer(nn.Module):
         print('shape of xf: ', xf.shape)
         print('shape of xm: ', xm.shape)
         # Cross-attention with padding masks, parallel update without weight sharing
-        for i, (layer_f, layer_m) in enumerate(zip(self.layers_fixed, self.layers_moved)):
+        for layer_f, layer_m in zip(self.layers_fixed, self.layers_moved):
             # Parallel computation: compute new states based on current states
-            # We only need to update xf if it's used in the next layer or output
-            # Since we only use zm for output, we can skip updating xf in the last layer
-            is_last_layer = (i == len(self.layers_fixed) - 1)
-            
-            if not is_last_layer:
-                xf_new = layer_f(xf, xm, mask_kv=mask_m)
-            else:
-                xf_new = xf # No need to update xf in last layer if unused
-                
+            xf_new = layer_f(xf, xm, mask_kv=mask_m)
             xm_new = layer_m(xm, xf, mask_kv=mask_f)
             # Update states simultaneously
             xf, xm = xf_new, xm_new
