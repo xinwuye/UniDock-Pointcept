@@ -229,6 +229,9 @@ class SinusoidalPositionEmbeddings(nn.Module):
         embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
         embeddings = time[:, None] * embeddings[None, :]
         embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+        # If dim is odd, pad with zero
+        if self.dim % 2 == 1:
+            embeddings = F.pad(embeddings, (0, 1))
         return embeddings
 
 
@@ -259,7 +262,7 @@ class DockingWrapperFlow(nn.Module):
             SinusoidalPositionEmbeddings(self.d_model),
             nn.Linear(self.d_model, self.d_model),
             nn.GELU(),
-            nn.Linear(self.d_model, self.d_model),
+            nn.Linear(self.d_model, 512), # Assume 512 is backbone out channels
         )
 
         load_backbone(self.backbone_fixed, weight_fixed, label="fixed")
@@ -384,6 +387,17 @@ class DockingWrapperFlow(nn.Module):
         # 5. Inject Time Embedding
         t_emb = self.time_mlp(t) # (B, C)
         t_emb_expanded = t_emb[batch_idx] # (N, C)
+
+        # Re-calculate batch_idx for the actual output features
+        # off_m is the offset for feat_m
+        batch_idx_m = torch.zeros(feat_m.shape[0], dtype=torch.long, device=dev)
+        start = 0
+        for i, end in enumerate(off_m):
+            end = int(end.item())
+            batch_idx_m[start:end] = i
+            start = end
+            
+        t_emb_expanded = t_emb[batch_idx_m] # (N_pooled, C)
         
         feat_m = feat_m + t_emb_expanded
         
