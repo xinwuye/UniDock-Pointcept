@@ -339,9 +339,6 @@ class DockingWrapperFlow(nn.Module):
         # # 2. Enforce shortest path (same hemisphere)
         # dot = torch.sum(q_noise * q_gt, dim=-1, keepdim=True)
         # q_noise = q_noise * torch.sign(dot)
-        
-        # # 3. SLERP Interpolation for state q_t
-        # q_t = q_slerp(q_noise, q_gt, t)
 
         # --- Rotation Flow (SO(3) Geodesic Flow, small-angle noise) ---
         B = q_gt.shape[0]
@@ -352,6 +349,9 @@ class DockingWrapperFlow(nn.Module):
 
         # 2. 把 axis-angle 噪声映射成四元数（绕 identity 的小旋转）
         q_noise = axis_angle_to_quat(omega_noise)  # (B, 4)
+
+        # 3. SLERP Interpolation for state q_t
+        q_t = q_slerp(q_noise, q_gt, t)
         
         # 4. Target Velocity (Angular Velocity in SO(3) tangent space)
         # Compute relative rotation: q_rel = q_noise^{-1} * q_gt
