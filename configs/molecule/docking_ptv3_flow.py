@@ -26,7 +26,17 @@ fixed_train_tf = [
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
 ]
-moved_train_tf = fixed_train_tf
+moved_train_tf = [
+    dict(type="ResetAugmentOps"),
+    dict(type="CenterShiftMoleculeRecordSeq"),
+    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="z", p=1.0),
+    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="y", p=1.0),
+    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="x", p=1.0),
+    dict(type="GaussianRandomShiftRecordSeq", p=1., mean=(0.0, 0.0, 0.0), sigma=(50.0, 50.0, 50.0)),
+    dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
+    dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
+    dict(type="ToTensor"),
+]
 
 fixed_eval_tf = [
     dict(type="ResetAugmentOps"),
@@ -34,12 +44,21 @@ fixed_eval_tf = [
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="z", p=1.0),
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="y", p=1.0),
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="x", p=1.0),
-    # dict(type="RandomShiftRecordSeq", shift=((-250.0, 250.0), (-250.0, 250.0), (-250.0, 250.0)), p=0.7),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
 ]
-moved_eval_tf = fixed_eval_tf
+moved_eval_tf = [
+    dict(type="ResetAugmentOps"),
+    dict(type="CenterShiftMoleculeRecordSeq"),
+    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="z", p=1.0),
+    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="y", p=1.0),
+    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="x", p=1.0),
+    dict(type="GaussianRandomShiftRecordSeq", p=1., mean=(0.0, 0.0, 0.0), sigma=(50.0, 50.0, 50.0)),
+    dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
+    dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
+    dict(type="ToTensor"),
+]
 
 data = dict(
     train=dict(

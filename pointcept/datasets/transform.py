@@ -287,6 +287,44 @@ class RandomShiftRecordSeq(object):
             ops.append(dict(type="shift", t=t))
         return data_dict
 
+
+@TRANSFORMS.register_module()
+class GaussianRandomShiftRecordSeq(object):
+    """
+    Gaussian random shift with recording into applied_ops preserving order.
+    - mean: float or 3-seq, per-axis mean
+    - sigma: float or 3-seq, per-axis standard deviation
+    - p: probability to apply
+    """
+    def __init__(self, mean=(0.0, 0.0, 0.0), sigma=(1.0, 1.0, 1.0), p=1.0):
+        self.mean = mean
+        self.sigma = sigma
+        self.p = p
+
+    def _to_vec(self, v):
+        if isinstance(v, (list, tuple, np.ndarray)):
+            if len(v) == 3:
+                return np.asarray(v, dtype=np.float32)
+        # scalar broadcast
+        return np.array([v, v, v], dtype=np.float32)
+
+    def __call__(self, data_dict):
+        if "coord" not in data_dict:
+            return data_dict
+        if random.random() > self.p:
+            ops = data_dict.get("applied_ops")
+            if ops is not None:
+                ops.append(dict(type="shift", t=np.zeros(3, dtype=np.float32)))
+            return data_dict
+        m = self._to_vec(self.mean)
+        s = self._to_vec(self.sigma)
+        t = np.random.normal(loc=m, scale=s).astype(np.float32)
+        data_dict["coord"] = data_dict["coord"] + t
+        ops = data_dict.get("applied_ops")
+        if ops is not None:
+            ops.append(dict(type="shift", t=t))
+        return data_dict
+
 @TRANSFORMS.register_module()
 class RandomShift(object):
     def __init__(self, shift=((-0.2, 0.2), (-0.2, 0.2), (0, 0))):
