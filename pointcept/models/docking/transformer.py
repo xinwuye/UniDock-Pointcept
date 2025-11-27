@@ -106,3 +106,53 @@ class DockingTransformer(nn.Module):
         rot = pred[:, :4]    # quaternion raw
         trans = pred[:, 4:]
         return rot, trans
+
+
+class DockingTransformerFlow(DockingTransformer):
+    def __init__(self, d_model=512, nhead=8, num_layers=2, pool='mean', out_dim=6):
+        super().__init__(d_model, nhead, num_layers, pool)
+        # Override head for Flow Matching output dim
+        # Output: out_dim (default 6 for 3D rot vel + 3D trans vel)
+        self.head = nn.Sequential(
+            nn.LayerNorm(d_model),
+            nn.Linear(d_model, 256),
+            nn.GELU(),
+            nn.Linear(256, out_dim),
+        )
+
+    def forward(self, feat_fixed, offset_fixed, feat_moved, offset_moved):
+        # Re-implement forward to avoid splitting 7 dims
+        # Copy-paste logic from parent but change return
+        
+        # Build padded batches
+        xf, mask_f = self._pad_batch(feat_fixed, offset_fixed)
+        xm, mask_m = self._pad_batch(feat_moved, offset_moved)
+        # print('shape of xf: ', xf.shape)
+        # print('shape of xm: ', xm.shape)
+        
+        num_common_layers = len(self.layers_fixed)
+        
+        for i in range(num_common_layers):
+            layer_f = self.layers_fixed[i]
+            layer_m = self.layers_moved[i]
+            
+            xf_new = layer_f(xf, xm, mask_kv=mask_m)
+            xm_new = layer_m(xm, xf, mask_kv=mask_f)
+            
+            xf, xm = xf_new, xm_new
+            
+        last_layer_m = self.layers_moved[-1]
+        xm = last_layer_m(xm, xf, mask_kv=mask_f)
+            
+        def masked_mean(x, mask):
+            valid = (~mask).unsqueeze(-1)
+            x_sum = (x * valid).sum(dim=1)
+            denom = valid.sum(dim=1).clamp_min(1.0)
+            return x_sum / denom
+            
+        zm = masked_mean(xm, mask_m)
+        z = zm
+        pred = self.head(z)  # (B, out_dim)
+        
+        # Return full prediction tensor (B, 6)
+        return pred

@@ -487,6 +487,88 @@ class DockingEvaluator(HookBase):
         self.trainer.comm_info["current_metric_name"] = "val_loss"
         self.trainer.model.train()
 
+
+@HOOKS.register_module()
+class DockingFlowEvaluator(HookBase):
+    """Evaluate docking flow matching: logs val/loss, val/loss_rot, val/loss_trans."""
+    def after_epoch(self):
+        if self.trainer.cfg.evaluate and self.trainer.val_loader is not None:
+            self.eval()
+
+    def eval(self):
+        self.trainer.logger.info(">>>>>>>>>>>>>>>> Start Docking Flow Evaluation >>>>>>>>>>>>>>>>")
+        self.trainer.model.eval()
+        device = torch.device("cuda", torch.cuda.current_device()) if torch.cuda.is_available() else torch.device("cpu")
+        loss_sum = torch.tensor(0.0, device=device)
+        loss_rot_sum = torch.tensor(0.0, device=device)
+        loss_trans_sum = torch.tensor(0.0, device=device)
+        count = torch.tensor(0.0, device=device)
+        
+        for i, input_dict in enumerate(self.trainer.val_loader):
+            for key in input_dict.keys():
+                if isinstance(input_dict[key], torch.Tensor):
+                    input_dict[key] = input_dict[key].cuda(non_blocking=True)
+            with torch.no_grad():
+                output = self.trainer.model(input_dict)
+            
+            l = output["loss"]
+            lr = output.get("loss_rot", 0.0)
+            lt = output.get("loss_trans", 0.0)
+            
+            if isinstance(l, torch.Tensor): l = l.detach().mean()
+            if isinstance(lr, torch.Tensor): lr = lr.detach().mean()
+            if isinstance(lt, torch.Tensor): lt = lt.detach().mean()
+            
+            loss_sum += l
+            loss_rot_sum += lr
+            loss_trans_sum += lt
+            count += 1.0
+            
+            self.trainer.logger.info(
+                "Val: [{iter}/{max_iter}] Loss {loss:.4f} Rot {lr:.4f} Trans {lt:.4f}".format(
+                    iter=i + 1,
+                    max_iter=len(self.trainer.val_loader),
+                    loss=float(l),
+                    lr=float(lr),
+                    lt=float(lt),
+                )
+            )
+            
+        if comm.get_world_size() > 1:
+            dist.all_reduce(loss_sum)
+            dist.all_reduce(loss_rot_sum)
+            dist.all_reduce(loss_trans_sum)
+            dist.all_reduce(count)
+            
+        avg_loss = (loss_sum / count).item()
+        avg_rot = (loss_rot_sum / count).item()
+        avg_trans = (loss_trans_sum / count).item()
+
+        current_epoch = self.trainer.epoch + 1
+        if self.trainer.writer is not None:
+            self.trainer.writer.add_scalar("val/loss", avg_loss, current_epoch)
+            self.trainer.writer.add_scalar("val/loss_rot", avg_rot, current_epoch)
+            self.trainer.writer.add_scalar("val/loss_trans", avg_trans, current_epoch)
+            if self.trainer.cfg.enable_wandb:
+                wandb.log(
+                    {
+                        "Epoch": current_epoch,
+                        "val/loss": avg_loss,
+                        "val/loss_rot": avg_rot,
+                        "val/loss_trans": avg_trans,
+                    },
+                    step=wandb.run.step,
+                )
+                
+        msg = f"Val result: Docking Loss {avg_loss:.4f} (rot {avg_rot:.4f}, trans {avg_trans:.4f})"
+        self.trainer.logger.info(msg + ".")
+        
+        # Choose smaller is better
+        self.trainer.comm_info["current_metric_value"] = -avg_loss
+        self.trainer.comm_info["current_metric_name"] = "val_loss"
+        self.trainer.model.train()
+
+
 @HOOKS.register_module()
 class InsSegEvaluator(HookBase):
     def __init__(self, segment_ignore_index=(-1,), instance_ignore_index=-1):
