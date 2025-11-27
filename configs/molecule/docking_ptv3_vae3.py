@@ -1,7 +1,7 @@
 _base_ = ["../_base_/default_runtime.py"]
 
 # Misc
-batch_size = 64
+batch_size = 128
 num_worker = 8
 # batch_size = 16
 mix_prob = 0.0
@@ -22,7 +22,7 @@ fixed_train_tf = [
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="z", p=1.0),
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="y", p=1.0),
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="x", p=1.0),
-    dict(type="RandomShiftRecordSeq", shift=((-250.0, 250.0), (-250.0, 250.0), (-250.0, 250.0)), p=0.7),
+    # dict(type="RandomShiftRecordSeq", shift=((-250.0, 250.0), (-250.0, 250.0), (-250.0, 250.0)), p=0.7),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
@@ -35,7 +35,7 @@ fixed_eval_tf = [
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="z", p=1.0),
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="y", p=1.0),
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="x", p=1.0),
-    dict(type="RandomShiftRecordSeq", shift=((-250.0, 250.0), (-250.0, 250.0), (-250.0, 250.0)), p=0.7),
+    # dict(type="RandomShiftRecordSeq", shift=((-250.0, 250.0), (-250.0, 250.0), (-250.0, 250.0)), p=1.),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
