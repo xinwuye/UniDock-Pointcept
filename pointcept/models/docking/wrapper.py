@@ -52,33 +52,37 @@ def q_multiply(q1, q2):
 def q_to_axis_angle(q):
     # q: (..., 4) [w, x, y, z]
     # Returns xi = theta * u (..., 3)
-    # Ensure q is normalized and w >= 0 (double cover) handled by caller or here?
-    # Caller usually ensures q_noise and q_gt are in same hemisphere.
+    # Stabilized version for Flow Matching
     
-    # Clip w to [-1, 1] to avoid NaN
-    w = q[..., 0].clamp(-1.0, 1.0)
+    w = q[..., 0]
     xyz = q[..., 1:]
-    norm_xyz = xyz.norm(dim=-1, keepdim=True)
+    norm_xyz = xyz.norm(dim=-1)
     
+    # 1. Ensure w >= 0 to get shortest rotation (double cover handling)
+    # If w < 0, we flip the whole quaternion q -> -q, which represents same rotation
+    # but with 0 <= theta <= pi
+    sign = torch.where(w < 0, -1.0, 1.0)
+    w = w * sign
+    xyz = xyz * sign
+    
+    # 2. Angle computation
     # theta = 2 * atan2(|xyz|, w)
-    # if |xyz| ~ 0, theta ~ 0, axis is arbitrary.
-    # u = xyz / |xyz|
-    
-    # Robust implementation using arctan2
+    # atan2 is stable at w=0 (theta=pi)
     theta = 2.0 * torch.atan2(norm_xyz, w)
     
-    # xi = theta * (xyz / norm_xyz) = (theta / norm_xyz) * xyz
-    # Limit theta/norm_xyz as norm_xyz -> 0:
-    # 2 * atan2(n, w) / n -> 2 * (n/w) / n = 2/w. If w=1, limit is 2.
-    # Taylor expansion for sinc could be used, or just a mask.
+    # 3. Compute scale = theta / sin(theta/2) ... wait, |xyz| = sin(theta/2)
+    # scale = theta / |xyz|
+    # Limit behavior: as |xyz| -> 0, w -> 1, theta -> 0.
+    # theta / |xyz| -> 2 * (1/w) -> 2
     
-    # Use small epsilon to avoid div by zero
     eps = 1e-6
-    scale = torch.where((norm_xyz < eps).squeeze(-1),
-                        2.0 / w.clamp(min=eps), # Approx for small angle
-                        theta.squeeze(-1) / norm_xyz.squeeze(-1)).unsqueeze(-1)
+    scale = torch.where(
+        norm_xyz > eps,
+        theta / norm_xyz,
+        torch.ones_like(norm_xyz) * 2.0
+    )
     
-    xi = scale * xyz
+    xi = scale.unsqueeze(-1) * xyz
     return xi
 
 def q_slerp(q0, q1, t):
