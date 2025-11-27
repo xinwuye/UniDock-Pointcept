@@ -1,9 +1,9 @@
 _base_ = ["../_base_/default_runtime.py"]
 
 # Misc
+batch_size = 128
+num_worker = 8
 # batch_size = 16
-# num_worker = 8
-batch_size = 1
 mix_prob = 0.0
 empty_cache = False
 enable_amp = True
@@ -22,7 +22,7 @@ fixed_train_tf = [
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="z", p=1.0),
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="y", p=1.0),
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="x", p=1.0),
-    dict(type="RandomShiftRecordSeq", shift=((-250.0, 250.0), (-250.0, 250.0), (-250.0, 250.0)), p=0.7),
+    # dict(type="RandomShiftRecordSeq", shift=((-250.0, 250.0), (-250.0, 250.0), (-250.0, 250.0)), p=0.7),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
@@ -35,7 +35,7 @@ fixed_eval_tf = [
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="z", p=1.0),
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="y", p=1.0),
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="x", p=1.0),
-    dict(type="RandomShiftRecordSeq", shift=((-250.0, 250.0), (-250.0, 250.0), (-250.0, 250.0)), p=0.7),
+    # dict(type="RandomShiftRecordSeq", shift=((-250.0, 250.0), (-250.0, 250.0), (-250.0, 250.0)), p=1.),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
@@ -79,7 +79,7 @@ model = dict(
         type="PT-v3m1",
         in_channels=45,  # proteins
         order=("z", "z-trans"),
-        stride=(2,2,2,2),
+        stride=(2,2,2,1),
         enc_depths=(2,2,2,6,2),
         enc_channels=(64,128,256,512,512),
         enc_num_head=(2,4,8,16,32),
@@ -108,7 +108,7 @@ model = dict(
         type="PT-v3m1",
         in_channels=29,  # ligands
         order=("z", "z-trans"),
-        stride=(2,2,2,2),
+        stride=(2,2,2,1),
         enc_depths=(2,2,2,6,2),
         enc_channels=(64,128,256,512,512),
         enc_num_head=(2,4,8,16,32),
