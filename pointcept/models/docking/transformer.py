@@ -35,8 +35,10 @@ class DockingTransformer(nn.Module):
         self.pool = pool
         # Output: 4 for quaternion (w,x,y,z) + 3 for translation
         self.head = nn.Sequential(
-            nn.LayerNorm(d_model * 2),
-            nn.Linear(d_model * 2, 256),
+            # nn.LayerNorm(d_model * 2),
+            # nn.Linear(d_model * 2, 256),
+            nn.LayerNorm(d_model),
+            nn.Linear(d_model, 256),
             nn.GELU(),
             nn.Linear(256, 7),
         )
@@ -68,6 +70,7 @@ class DockingTransformer(nn.Module):
         # Build padded batches
         xf, mask_f = self._pad_batch(feat_fixed, offset_fixed)
         xm, mask_m = self._pad_batch(feat_moved, offset_moved)
+        print('shape of xf: ', xf.shape)
         print('shape of xm: ', xm.shape)
         # Cross-attention with padding masks, parallel update without weight sharing
         for layer_f, layer_m in zip(self.layers_fixed, self.layers_moved):
@@ -83,9 +86,10 @@ class DockingTransformer(nn.Module):
             x_sum = (x * valid).sum(dim=1)
             denom = valid.sum(dim=1).clamp_min(1.0)
             return x_sum / denom
-        zf = masked_mean(xf, mask_f)
+        # zf = masked_mean(xf, mask_f)
         zm = masked_mean(xm, mask_m)
-        z = torch.cat([zf, zm], dim=-1)
+        # z = torch.cat([zf, zm], dim=-1)
+        z = zm
         pred = self.head(z)  # (B,7)
         rot = pred[:, :4]    # quaternion raw
         trans = pred[:, 4:]

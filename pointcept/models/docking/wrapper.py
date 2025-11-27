@@ -91,7 +91,13 @@ class DockingWrapper(nn.Module):
             for k in d:
                 if isinstance(d[k], torch.Tensor):
                     d[k] = d[k].to(dev)
-
+        # Debug: print fixed coords shape before encoding
+        try:
+            fc = fixed.get('coord')
+            if isinstance(fc, torch.Tensor):
+                print(f"[Docking] fixed coord shape: {tuple(fc.shape)}")
+        except Exception:
+            pass
         feat_f, off_f = self.encode(self.backbone_fixed, fixed)
         # Debug: print moved coords shape before encoding
         try:

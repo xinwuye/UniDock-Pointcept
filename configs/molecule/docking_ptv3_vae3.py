@@ -1,8 +1,9 @@
 _base_ = ["../_base_/default_runtime.py"]
 
 # Misc
-batch_size = 16
-num_worker = 8
+# batch_size = 16
+# num_worker = 8
+batch_size = 1
 mix_prob = 0.0
 empty_cache = False
 enable_amp = True
@@ -13,8 +14,8 @@ fixed_root = "data/pdbbind2020r1/proteins"
 moved_root = "data/pdbbind2020r1/ligands"
 
 # Build paired dataset with recorded rigid augments
-# grid_size = 0.5
-grid_size = 0.05
+grid_size = 0.5
+# grid_size = 0.05
 fixed_train_tf = [
     dict(type="ResetAugmentOps"),
     dict(type="CenterShiftMoleculeRecordSeq"),
@@ -78,7 +79,7 @@ model = dict(
         type="PT-v3m1",
         in_channels=45,  # proteins
         order=("z", "z-trans"),
-        stride=(2,2,2,1),
+        stride=(2,2,2,2),
         enc_depths=(2,2,2,6,2),
         enc_channels=(64,128,256,512,512),
         enc_num_head=(2,4,8,16,32),
@@ -107,7 +108,7 @@ model = dict(
         type="PT-v3m1",
         in_channels=29,  # ligands
         order=("z", "z-trans"),
-        stride=(2,2,2,1),
+        stride=(2,2,2,2),
         enc_depths=(2,2,2,6,2),
         enc_channels=(64,128,256,512,512),
         enc_num_head=(2,4,8,16,32),
