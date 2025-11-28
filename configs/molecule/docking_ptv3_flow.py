@@ -26,6 +26,7 @@ fixed_train_tf = [
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
+    dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type", "coord")),
 ]
 moved_train_tf = [
     dict(type="ResetAugmentOps"),
@@ -37,6 +38,7 @@ moved_train_tf = [
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
+    dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type", "coord")),
 ]
 
 fixed_eval_tf = [
@@ -48,6 +50,7 @@ fixed_eval_tf = [
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
+    dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type", "coord")),
 ]
 moved_eval_tf = [
     dict(type="ResetAugmentOps"),
@@ -59,6 +62,7 @@ moved_eval_tf = [
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
+    dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type", "coord")),
 ]
 
 data = dict(
@@ -97,7 +101,7 @@ model = dict(
     grid_size=0.5,
     backbone_fixed=dict(
         type="PT-v3m1",
-        in_channels=45,  # proteins
+        in_channels=45 + 3,  # proteins + coord
         order=("z", "z-trans"),
         stride=(2,2,2,2),
         enc_depths=(2,2,2,6,2),
@@ -126,7 +130,7 @@ model = dict(
     ),
     backbone_moved=dict(
         type="PT-v3m1",
-        in_channels=29,  # ligands
+        in_channels=29 + 3,  # ligands + coord
         order=("z", "z-trans"),
         stride=(2,2,2,2),
         enc_depths=(2,2,2,6,2),
