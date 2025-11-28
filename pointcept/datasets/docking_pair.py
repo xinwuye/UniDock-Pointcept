@@ -181,4 +181,10 @@ class DockingPairDataset(Dataset):
             t_fixed=tf.astype(np.float32),
             t_moved=tm.astype(np.float32),
         )
+
+        if 'feat' in fixed:
+            out['feat_fixed'] = fixed['feat']
+        if 'feat' in moved:
+            out['feat_moved'] = moved['feat']
+
         return out

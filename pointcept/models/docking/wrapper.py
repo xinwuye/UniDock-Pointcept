@@ -296,10 +296,6 @@ class DockingWrapperFlow(nn.Module):
         self.mse = nn.MSELoss()
 
     def encode(self, backbone, batch):
-        # Ensure required keys for Point
-        if 'feat' not in batch and 'atom_type' in batch:
-            batch = dict(batch)
-            batch['feat'] = batch['atom_type']
         point = Point(batch)
         point.serialization(order=backbone.order, shuffle_orders=backbone.shuffle_orders)
         point.sparsify()
@@ -396,6 +392,7 @@ class DockingWrapperFlow(nn.Module):
             grid_coord=input_dict.get('grid_coord_fixed'),
             atom_type=input_dict['atom_type_fixed'].to(dev),
             offset=input_dict.get('offset_fixed'),
+            feat=input_dict['feat_fixed'].to(dev),
         )
         if 'grid_coord' not in fixed:
              fixed['grid_size'] = self.grid_size
@@ -404,7 +401,8 @@ class DockingWrapperFlow(nn.Module):
             coord=coord_moved_t,
             atom_type=input_dict['atom_type_moved'].to(dev),
             offset=offset_moved,
-            grid_size=self.grid_size
+            grid_size=self.grid_size,
+            feat=input_dict['feat_moved'].to(dev),
         )
         
         feat_f, off_f = self.encode(self.backbone_fixed, fixed)
