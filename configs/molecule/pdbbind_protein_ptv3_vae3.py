@@ -36,7 +36,7 @@ model = dict(
     ),
     backbone=dict(
         type="PT-v3m1",
-        in_channels=num_atom_types,
+        in_channels=num_atom_types + 3,
         order=("z", "z-trans"),
         stride=(2, 2, 2, 1),
         enc_depths=(2, 2, 2, 6, 2),
@@ -89,14 +89,14 @@ train_transform = [
     dict(type="RandomRotate", angle=[-1, 1], axis="x", p=1.),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
-    dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type",)),
+    dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type", "coord")),
 ]
 
 eval_transform = [
     dict(type="CenterShiftMolecule"),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
-    dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type",)),
+    dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type", "coord")),
 ]
 
 data = dict(
