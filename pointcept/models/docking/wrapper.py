@@ -152,10 +152,10 @@ class DockingWrapper(nn.Module):
         self.l1 = nn.SmoothL1Loss()
 
     def encode(self, backbone, batch):
-        # Ensure required keys for Point
-        if 'feat' not in batch and 'atom_type' in batch:
-            batch = dict(batch)
-            batch['feat'] = batch['atom_type']
+        # # Ensure required keys for Point
+        # if 'feat' not in batch and 'atom_type' in batch:
+        #     batch = dict(batch)
+        #     batch['feat'] = batch['atom_type']
         point = Point(batch)
         point.serialization(order=backbone.order, shuffle_orders=backbone.shuffle_orders)
         point.sparsify()
