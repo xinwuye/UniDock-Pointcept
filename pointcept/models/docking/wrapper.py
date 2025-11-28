@@ -323,7 +323,7 @@ class DockingWrapperFlow(nn.Module):
             t = input_dict.get('t', torch.rand(B, device=dev))
         
         # --- Translation Flow (Euclidean Rectified Flow) ---
-        sigma = 50.0  
+        sigma = 5.0  
         t_noise = sigma * torch.randn_like(t_gt)
         # t_noise = torch.randn_like(t_gt)
         # Interpolate: X_t = t * X_1 + (1 - t) * X_0

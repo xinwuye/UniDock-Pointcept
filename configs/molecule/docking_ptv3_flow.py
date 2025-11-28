@@ -1,7 +1,8 @@
 _base_ = ["../_base_/default_runtime.py"]
 
 # Misc
-batch_size = 512
+# batch_size = 512
+batch_size = 128
 num_worker = 8
 mix_prob = 0.0
 empty_cache = False
@@ -18,9 +19,9 @@ grid_size = 0.5
 fixed_train_tf = [
     dict(type="ResetAugmentOps"),
     dict(type="CenterShiftMoleculeRecordSeq"),
-    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="z", p=1.0),
-    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="y", p=1.0),
-    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="x", p=1.0),
+    # dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="z", p=1.0),
+    # dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="y", p=1.0),
+    # dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="x", p=1.0),
     # dict(type="RandomShiftRecordSeq", shift=((-250.0, 250.0), (-250.0, 250.0), (-250.0, 250.0)), p=0.7),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
@@ -32,7 +33,7 @@ moved_train_tf = [
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="z", p=1.0),
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="y", p=1.0),
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="x", p=1.0),
-    dict(type="GaussianRandomShiftRecordSeq", p=1., mean=(0.0, 0.0, 0.0), sigma=(50.0, 50.0, 50.0)),
+    dict(type="GaussianRandomShiftRecordSeq", p=1., mean=(0.0, 0.0, 0.0), sigma=(5.0, 5.0, 5.0)),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
@@ -41,9 +42,9 @@ moved_train_tf = [
 fixed_eval_tf = [
     dict(type="ResetAugmentOps"),
     dict(type="CenterShiftMoleculeRecordSeq"),
-    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="z", p=1.0),
-    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="y", p=1.0),
-    dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="x", p=1.0),
+    # dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="z", p=1.0),
+    # dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="y", p=1.0),
+    # dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="x", p=1.0),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
@@ -54,7 +55,7 @@ moved_eval_tf = [
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="z", p=1.0),
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="y", p=1.0),
     dict(type="RandomRotateRecordSeq", angle=[-1, 1], axis="x", p=1.0),
-    dict(type="GaussianRandomShiftRecordSeq", p=1., mean=(0.0, 0.0, 0.0), sigma=(50.0, 50.0, 50.0)),
+    dict(type="GaussianRandomShiftRecordSeq", p=1., mean=(0.0, 0.0, 0.0), sigma=(5.0, 5.0, 5.0)),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
