@@ -26,7 +26,11 @@ fixed_train_tf = [
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
-    dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type", "coord")),
+    dict(
+        type="Collect",
+        keys=("coord", "grid_coord", "atom_type", "coord_aug_before_voxel", "applied_ops"),
+        feat_keys=("atom_type", "coord"),
+    ),
 ]
 moved_train_tf = [
     dict(type="ResetAugmentOps"),
@@ -38,7 +42,11 @@ moved_train_tf = [
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
-    dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type", "coord")),
+    dict(
+        type="Collect",
+        keys=("coord", "grid_coord", "atom_type", "coord_aug_before_voxel", "applied_ops"),
+        feat_keys=("atom_type", "coord"),
+    ),
 ]
 
 fixed_eval_tf = [
@@ -50,7 +58,11 @@ fixed_eval_tf = [
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
-    dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type", "coord")),
+    dict(
+        type="Collect",
+        keys=("coord", "grid_coord", "atom_type", "coord_aug_before_voxel", "applied_ops"),
+        feat_keys=("atom_type", "coord"),
+    ),
 ]
 moved_eval_tf = [
     dict(type="ResetAugmentOps"),
@@ -62,7 +74,11 @@ moved_eval_tf = [
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type"]),
     dict(type="ToTensor"),
-    dict(type="Collect", keys=("coord", "grid_coord", "atom_type"), feat_keys=("atom_type", "coord")),
+    dict(
+        type="Collect",
+        keys=("coord", "grid_coord", "atom_type", "coord_aug_before_voxel", "applied_ops"),
+        feat_keys=("atom_type", "coord"),
+    ),
 ]
 
 data = dict(

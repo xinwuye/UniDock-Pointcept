@@ -271,7 +271,7 @@ class DockingWrapperFlow(nn.Module):
         transformer['out_dim'] = 6
         self.transformer = DockingTransformerFlow(**transformer)
 
-        self.d_model = transformer.get('d_model', 512)
+        self.d_model = transformer.get('d_model')
         self.time_mlp = nn.Sequential(
             SinusoidalPositionEmbeddings(self.d_model),
             nn.Linear(self.d_model, self.d_model),
