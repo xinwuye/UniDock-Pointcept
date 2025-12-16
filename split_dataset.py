@@ -4,8 +4,13 @@ Split processed scene folders into train/val/test subsets via symlinks.
 
 Example:
     python split_dataset.py \
-        --input-dir data/pdb_processed \
-        --output-dir data/pdb_split \
+        --input-dir data/pdbbind2020r1/proteins_orig \
+        --output-dir data/pdbbind2020r1/proteins \
+        --ratios 80 10 10
+
+    python split_dataset.py \
+        --input-dir data/pdbbind2020r1/ligands_orig \
+        --output-dir data/pdbbind2020r1/ligands \
         --ratios 80 10 10
 """
 

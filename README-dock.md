@@ -2,8 +2,9 @@
     ```bash
     conda env create -f environment.yml --verbose
     conda activate pointcept-torch2.5.0-cu12.4
-    git@github.com:Dao-AILab/flash-attention.git
+    git clone git@github.com:Dao-AILab/flash-attention.git
     cd flash-attention
+    git config --global --add safe.directory '*'
     MAX_JOBS=4 FLASH_ATTN_CUDA_ARCHS="80;90" python setup.py install
     cd ..
     pip install -v --no-build-isolation ./libs/pointops
