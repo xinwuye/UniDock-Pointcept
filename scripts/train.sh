@@ -48,6 +48,14 @@ while getopts "p:d:c:n:w:g:m:r:" opt; do
   esac
 done
 
+# Forward extra config overrides to python entrypoint.
+# Usage:
+#   sh scripts/train.sh ... -- key=value other.nested.key=value
+shift $((OPTIND - 1))
+if [ "${1:-}" = "--" ]; then
+  shift 1
+fi
+
 if [ "${NUM_GPU}" = 'None' ]
 then
   NUM_GPU=`$PYTHON -c 'import torch; print(torch.cuda.device_count())'`
@@ -102,7 +110,7 @@ then
     --num-machines "$NUM_MACHINE" \
     --machine-rank ${SLURM_NODEID:-0} \
     --dist-url ${DIST_URL} \
-    --options save_path="$EXP_DIR"
+    --options save_path="$EXP_DIR" "$@"
 else
     $PYTHON "$CODE_DIR"/tools/$TRAIN_CODE \
     --config-file "$CONFIG_DIR" \
@@ -110,5 +118,5 @@ else
     --num-machines "$NUM_MACHINE" \
     --machine-rank ${SLURM_NODEID:-0} \
     --dist-url ${DIST_URL} \
-    --options save_path="$EXP_DIR" resume="$RESUME" weight="$WEIGHT"
+    --options save_path="$EXP_DIR" resume="$RESUME" weight="$WEIGHT" "$@"
 fi

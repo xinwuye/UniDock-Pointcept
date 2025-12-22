@@ -29,3 +29,6 @@ from .concerto import *
 
 # Docking models
 from .docking.wrapper import *
+
+# Molecule regression models
+from .molecule.lba_regressor import *

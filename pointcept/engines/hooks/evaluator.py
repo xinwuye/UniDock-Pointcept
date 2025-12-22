@@ -327,7 +327,7 @@ class ReconstructionEvaluator(HookBase):
         self.trainer.logger.info(
             "Val result: Reconstruction Loss {:.4f}".format(avg_loss)
         )
-        self.trainer.comm_info["current_metric_value"] = -avg_loss
+        self.trainer.comm_info["current_metric_value"] = avg_loss
         self.trainer.comm_info["current_metric_name"] = "val_loss"
         self.trainer.model.train()
 
@@ -483,7 +483,7 @@ class DockingEvaluator(HookBase):
             msg += f", rmsd {avg_rmsd:.4f}"
         self.trainer.logger.info(msg + ".")
         # Choose smaller is better so saver tracks min loss
-        self.trainer.comm_info["current_metric_value"] = -avg_loss
+        self.trainer.comm_info["current_metric_value"] = avg_loss
         self.trainer.comm_info["current_metric_name"] = "val_loss"
         self.trainer.model.train()
 
@@ -564,8 +564,113 @@ class DockingFlowEvaluator(HookBase):
         self.trainer.logger.info(msg + ".")
         
         # Choose smaller is better
-        self.trainer.comm_info["current_metric_value"] = -avg_loss
+        self.trainer.comm_info["current_metric_value"] = avg_loss
         self.trainer.comm_info["current_metric_name"] = "val_loss"
+        self.trainer.model.train()
+
+
+@HOOKS.register_module()
+class LBARegressionEvaluator(HookBase):
+    """Evaluator for LBA regression.
+
+    Expects:
+      - input_dict["affinity"] (B,) or (B,1)
+      - model output contains "pred" (B,)
+    Logs:
+      - val/mse, val/rmse, val/mae
+    """
+
+    def after_epoch(self):
+        if self.trainer.cfg.evaluate and self.trainer.val_loader is not None:
+            self.eval()
+
+    def eval(self):
+        self.trainer.logger.info(
+            ">>>>>>>>>>>>>>>> Start LBA Regression Evaluation >>>>>>>>>>>>>>>>"
+        )
+        self.trainer.model.eval()
+
+        device = (
+            torch.device("cuda", torch.cuda.current_device())
+            if torch.cuda.is_available()
+            else torch.device("cpu")
+        )
+
+        # Accumulate *sample-weighted* sums so final metrics are correct even when
+        # the last batch is smaller than others (or when batch sizes vary).
+        sse_sum = torch.tensor(0.0, device=device)  # sum of squared errors
+        sae_sum = torch.tensor(0.0, device=device)  # sum of absolute errors
+        count = torch.tensor(0.0, device=device)  # number of samples
+
+        for i, input_dict in enumerate(self.trainer.val_loader):
+            for key in input_dict.keys():
+                if isinstance(input_dict[key], torch.Tensor):
+                    input_dict[key] = input_dict[key].cuda(non_blocking=True)
+
+            with torch.no_grad():
+                output = self.trainer.model(input_dict)
+
+            pred = output.get("pred")
+            y = input_dict.get("affinity")
+            if pred is None or y is None:
+                raise KeyError(
+                    "LBARegressionEvaluator expects model output 'pred' and input 'affinity'."
+                )
+
+            pred = pred.view(-1).float()
+            y = y.view(-1).float()
+            err = pred - y
+            mse = torch.mean(err**2)
+            mae = torch.mean(torch.abs(err))
+
+            # Weighted aggregation
+            batch_n = torch.tensor(float(y.numel()), device=device)
+            sse_sum += torch.sum(err**2)
+            sae_sum += torch.sum(torch.abs(err))
+            count += batch_n
+
+            self.trainer.logger.info(
+                "Val: [{iter}/{max_iter}] MSE {mse:.4f} MAE {mae:.4f}".format(
+                    iter=i + 1,
+                    max_iter=len(self.trainer.val_loader),
+                    mse=float(mse),
+                    mae=float(mae),
+                )
+            )
+
+        if comm.get_world_size() > 1:
+            dist.all_reduce(sse_sum)
+            dist.all_reduce(sae_sum)
+            dist.all_reduce(count)
+
+        avg_mse = (sse_sum / count).item()
+        avg_mae = (sae_sum / count).item()
+        avg_rmse = float(np.sqrt(avg_mse))
+
+        current_epoch = self.trainer.epoch + 1
+        if self.trainer.writer is not None:
+            self.trainer.writer.add_scalar("val/mse", avg_mse, current_epoch)
+            self.trainer.writer.add_scalar("val/mae", avg_mae, current_epoch)
+            self.trainer.writer.add_scalar("val/rmse", avg_rmse, current_epoch)
+            if self.trainer.cfg.enable_wandb:
+                wandb.log(
+                    {
+                        "Epoch": current_epoch,
+                        "val/mse": avg_mse,
+                        "val/mae": avg_mae,
+                        "val/rmse": avg_rmse,
+                    },
+                    step=wandb.run.step,
+                )
+
+        self.trainer.logger.info(
+            f"Val result: MSE {avg_mse:.4f}, RMSE {avg_rmse:.4f}, MAE {avg_mae:.4f}."
+        )
+
+        # smaller is better -> maximize negative MSE
+        self.trainer.comm_info["current_metric_value"] = avg_mse
+        self.trainer.comm_info["current_metric_name"] = "val_mse"
+
         self.trainer.model.train()
 
 

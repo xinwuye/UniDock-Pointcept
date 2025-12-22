@@ -21,6 +21,7 @@ from .modelnet import ModelNetDataset
 from .shapenet_part import ShapeNetPartDataset
 from .docking_pair import DockingPairDataset
 from .molecule import MoleculeDataset
+from .lba_regression import LBARegressionDataset
 
 # dataloader
 from .dataloader import MultiDatasetDataloader
