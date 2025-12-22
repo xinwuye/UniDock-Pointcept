@@ -327,7 +327,7 @@ class ReconstructionEvaluator(HookBase):
         self.trainer.logger.info(
             "Val result: Reconstruction Loss {:.4f}".format(avg_loss)
         )
-        self.trainer.comm_info["current_metric_value"] = avg_loss
+        self.trainer.comm_info["current_metric_value"] = -avg_loss
         self.trainer.comm_info["current_metric_name"] = "val_loss"
         self.trainer.model.train()
 
@@ -483,7 +483,7 @@ class DockingEvaluator(HookBase):
             msg += f", rmsd {avg_rmsd:.4f}"
         self.trainer.logger.info(msg + ".")
         # Choose smaller is better so saver tracks min loss
-        self.trainer.comm_info["current_metric_value"] = avg_loss
+        self.trainer.comm_info["current_metric_value"] = -avg_loss
         self.trainer.comm_info["current_metric_name"] = "val_loss"
         self.trainer.model.train()
 
@@ -564,7 +564,7 @@ class DockingFlowEvaluator(HookBase):
         self.trainer.logger.info(msg + ".")
         
         # Choose smaller is better
-        self.trainer.comm_info["current_metric_value"] = avg_loss
+        self.trainer.comm_info["current_metric_value"] = -avg_loss
         self.trainer.comm_info["current_metric_name"] = "val_loss"
         self.trainer.model.train()
 
@@ -668,7 +668,7 @@ class LBARegressionEvaluator(HookBase):
         )
 
         # smaller is better -> maximize negative MSE
-        self.trainer.comm_info["current_metric_value"] = avg_mse
+        self.trainer.comm_info["current_metric_value"] = -avg_mse
         self.trainer.comm_info["current_metric_name"] = "val_mse"
 
         self.trainer.model.train()

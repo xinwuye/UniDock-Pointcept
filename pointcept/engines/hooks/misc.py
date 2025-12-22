@@ -167,8 +167,11 @@ class InformationWriter(HookBase):
 
 @HOOKS.register_module()
 class CheckpointSaver(HookBase):
-    def __init__(self, save_freq=None):
-        self.save_freq = save_freq  # None or int, None indicate only save model last
+    def __init__(self, save_freq=None, save_last_freq=1):
+        # save_freq: optionally also keep periodic snapshots "epoch_{k}.pth"
+        # save_last_freq: how often to update "model_last.pth" (1 => every epoch)
+        self.save_freq = save_freq
+        self.save_last_freq = save_last_freq
 
     def after_epoch(self):
         if is_main_process():
@@ -190,40 +193,50 @@ class CheckpointSaver(HookBase):
                     )
                 )
 
-            filename = os.path.join(
-                self.trainer.cfg.save_path, "model", "model_last.pth"
+            epoch = self.trainer.epoch + 1
+            model_dir = os.path.join(self.trainer.cfg.save_path, "model")
+            filename_last = os.path.join(model_dir, "model_last.pth")
+
+            state = {
+                "epoch": epoch,
+                "state_dict": self.trainer.model.state_dict(),
+                "optimizer": self.trainer.optimizer.state_dict(),
+                "scheduler": self.trainer.scheduler.state_dict(),
+                "scaler": (
+                    self.trainer.scaler.state_dict() if self.trainer.cfg.enable_amp else None
+                ),
+                "best_metric_value": self.trainer.best_metric_value,
+            }
+
+            # Save/update model_last less frequently if requested, but always
+            # materialize a checkpoint when a new best appears (so model_best can be saved).
+            should_save_last = (
+                self.save_last_freq is None
+                or self.save_last_freq <= 1
+                or (epoch % self.save_last_freq == 0)
+                or is_best
             )
-            self.trainer.logger.info("Saving checkpoint to: " + filename)
-            torch.save(
-                {
-                    "epoch": self.trainer.epoch + 1,
-                    "state_dict": self.trainer.model.state_dict(),
-                    "optimizer": self.trainer.optimizer.state_dict(),
-                    "scheduler": self.trainer.scheduler.state_dict(),
-                    "scaler": (
-                        self.trainer.scaler.state_dict()
-                        if self.trainer.cfg.enable_amp
-                        else None
-                    ),
-                    "best_metric_value": self.trainer.best_metric_value,
-                },
-                filename + ".tmp",
-            )
-            os.replace(filename + ".tmp", filename)
+            if should_save_last:
+                self.trainer.logger.info("Saving checkpoint to: " + filename_last)
+                torch.save(state, filename_last + ".tmp")
+                os.replace(filename_last + ".tmp", filename_last)
+
             if is_best:
-                shutil.copyfile(
-                    filename,
-                    os.path.join(self.trainer.cfg.save_path, "model", "model_best.pth"),
-                )
-            if self.save_freq and (self.trainer.epoch + 1) % self.save_freq == 0:
-                shutil.copyfile(
-                    filename,
-                    os.path.join(
-                        self.trainer.cfg.save_path,
-                        "model",
-                        f"epoch_{self.trainer.epoch + 1}.pth",
-                    ),
-                )
+                best_path = os.path.join(model_dir, "model_best.pth")
+                if should_save_last:
+                    shutil.copyfile(filename_last, best_path)
+                else:
+                    # If we throttled model_last, still persist the best checkpoint.
+                    self.trainer.logger.info("Saving best checkpoint to: " + best_path)
+                    torch.save(state, best_path + ".tmp")
+                    os.replace(best_path + ".tmp", best_path)
+
+            # Optional periodic snapshots
+            if self.save_freq and (epoch % self.save_freq == 0):
+                snap_path = os.path.join(model_dir, f"epoch_{epoch}.pth")
+                self.trainer.logger.info("Saving checkpoint to: " + snap_path)
+                torch.save(state, snap_path + ".tmp")
+                os.replace(snap_path + ".tmp", snap_path)
 
 
 @HOOKS.register_module()
