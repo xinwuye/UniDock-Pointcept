@@ -16,6 +16,8 @@ import torch.distributed as dist
 import torch.nn.functional as F
 import torch.utils.data
 
+import scipy.stats as stats
+
 from .defaults import create_ddp_model
 import pointcept.utils.comm as comm
 from pointcept.datasets import build_dataset, collate_fn
@@ -117,6 +119,166 @@ class TesterBase:
     @staticmethod
     def collate_fn(batch):
         raise collate_fn(batch)
+
+def _pearson_corr(x: np.ndarray, y: np.ndarray) -> float:
+    x = np.asarray(x, dtype=np.float64).reshape(-1)
+    y = np.asarray(y, dtype=np.float64).reshape(-1)
+    if x.size < 2:
+        return float("nan")
+    if np.all(x == x[0]) or np.all(y == y[0]):
+        return float("nan")
+    return float(stats.pearsonr(x, y).statistic)
+
+
+def _spearman_corr(x: np.ndarray, y: np.ndarray) -> float:
+    x = np.asarray(x, dtype=np.float64).reshape(-1)
+    y = np.asarray(y, dtype=np.float64).reshape(-1)
+    if x.size < 2:
+        return float("nan")
+    return float(stats.spearmanr(x, y).correlation)
+
+
+@TESTERS.register_module()
+class LBARegressionTester(TesterBase):
+    """
+    Tester for LBA regression.
+
+    Expects:
+      - input_dict contains "affinity" (B,) or (B,1)
+      - model output contains "pred" (B,) or (B,1)
+    Outputs:
+      - metrics: MSE, MAE, RMSE, Pearson, Spearman
+      - per-sample predictions saved to <save_path>/result/
+    """
+
+    def __init__(
+        self,
+        cfg,
+        model=None,
+        test_loader=None,
+        verbose=False,
+        save_pred=True,
+        pred_filename=None,
+    ) -> None:
+        self.save_pred = save_pred
+        self.pred_filename = pred_filename  # optional override
+        super().__init__(cfg, model=model, test_loader=test_loader, verbose=verbose)
+
+    @staticmethod
+    def collate_fn(batch):
+        # For regression we want the standard dict-collate behavior.
+        return collate_fn(batch)
+
+    def test(self):
+        logger = get_root_logger()
+        logger.info(">>>>>>>>>>>>>>>> Start LBA Regression Evaluation >>>>>>>>>>>>>>>>")
+        self.model.eval()
+
+        # local accumulators
+        local_names = []
+        local_pred = []
+        local_y = []
+
+        device = (
+            torch.device("cuda", torch.cuda.current_device())
+            if torch.cuda.is_available()
+            else torch.device("cpu")
+        )
+        sse_sum = torch.tensor(0.0, device=device)
+        sae_sum = torch.tensor(0.0, device=device)
+        count = torch.tensor(0.0, device=device)
+
+        for idx, input_dict in enumerate(self.test_loader):
+            # Move tensors to GPU
+            for key in list(input_dict.keys()):
+                if isinstance(input_dict[key], torch.Tensor):
+                    input_dict[key] = input_dict[key].cuda(non_blocking=True)
+
+            with torch.no_grad():
+                output = self.model(input_dict)
+
+            pred = output.get("pred")
+            y = input_dict.get("affinity")
+            if pred is None or y is None:
+                raise KeyError(
+                    "LBARegressionTester expects model output 'pred' and input 'affinity'."
+                )
+
+            pred = pred.view(-1).float()
+            y = y.view(-1).float()
+            err = pred - y
+
+            sse_sum += torch.sum(err**2)
+            sae_sum += torch.sum(torch.abs(err))
+            count += float(y.numel())
+
+            # Names are optional; if not provided by pipeline, we fall back to idx-based names.
+            names = input_dict.get("name", None)
+            if names is None:
+                names = [f"sample_{idx}"] * int(y.numel())
+            elif isinstance(names, str):
+                names = [names]
+            # collate_fn turns strings into list[str]
+
+            local_names.extend([str(n) for n in names])
+            local_pred.extend(pred.detach().cpu().numpy().tolist())
+            local_y.extend(y.detach().cpu().numpy().tolist())
+
+        # DDP reduce sums for MSE/MAE
+        if comm.get_world_size() > 1:
+            dist.all_reduce(sse_sum)
+            dist.all_reduce(sae_sum)
+            dist.all_reduce(count)
+
+        mse = (sse_sum / count).item() if count.item() > 0 else float("nan")
+        mae = (sae_sum / count).item() if count.item() > 0 else float("nan")
+        rmse = float(np.sqrt(mse)) if np.isfinite(mse) else float("nan")
+
+        # Gather per-sample arrays for correlations + saving
+        gathered = comm.all_gather(
+            dict(names=local_names, pred=local_pred, y=local_y)
+        )
+        if comm.is_main_process():
+            all_names = []
+            all_pred = []
+            all_y = []
+            for g in gathered:
+                all_names.extend(g["names"])
+                all_pred.extend(g["pred"])
+                all_y.extend(g["y"])
+
+            y_np = np.asarray(all_y, dtype=np.float64)
+            pred_np = np.asarray(all_pred, dtype=np.float64)
+            pearson = _pearson_corr(pred_np, y_np)
+            spearman = _spearman_corr(pred_np, y_np)
+
+            logger.info(
+                "Test result: MSE {:.6f}, RMSE {:.6f}, MAE {:.6f}, Pearson {:.6f}, Spearman {:.6f}".format(
+                    mse, rmse, mae, pearson, spearman
+                )
+            )
+
+            if self.save_pred:
+                save_dir = os.path.join(self.cfg.save_path, "result")
+                make_dirs(save_dir)
+                split = getattr(self.cfg.data.test, "split", "test")
+                filename = (
+                    self.pred_filename
+                    if self.pred_filename
+                    else f"lba_regression_predictions_{split}.csv"
+                )
+                out_path = os.path.join(save_dir, filename)
+                with open(out_path, "w", encoding="utf-8") as f:
+                    f.write("name,y,pred,err\n")
+                    for n, yy, pp in zip(all_names, y_np.tolist(), pred_np.tolist()):
+                        f.write(f"{n},{yy:.8f},{pp:.8f},{(pp-yy):.8f}\n")
+                logger.info(f"Saved per-sample predictions to: {out_path}")
+        else:
+            logger.info(
+                "Test result (local): MSE {:.6f}, RMSE {:.6f}, MAE {:.6f}".format(
+                    mse, rmse, mae
+                )
+            )
 
 
 @TESTERS.register_module()

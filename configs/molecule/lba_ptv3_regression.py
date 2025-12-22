@@ -108,6 +108,10 @@ model = dict(
     loss=dict(type="mse"),
 )
 
+# Use regression tester instead of default semantic segmentation tester.
+# It will compute MSE/MAE/RMSE/Pearson/Spearman and save per-sample predictions.
+test = dict(type="LBARegressionTester", verbose=True, save_pred=True)
+
 
 # Training schedule
 epoch = 500
