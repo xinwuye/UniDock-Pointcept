@@ -7,6 +7,7 @@ Please cite our work if the code is helpful to you.
 
 import random
 import numbers
+import math
 import scipy
 import scipy.ndimage
 import scipy.interpolate
@@ -411,6 +412,76 @@ class RandomRotate(object):
             data_dict["coord"] += center
         if "normal" in data_dict.keys():
             data_dict["normal"] = np.dot(data_dict["normal"], np.transpose(rot_t))
+        return data_dict
+
+
+@TRANSFORMS.register_module()
+class UniformRandomRotate3D(object):
+    """
+    Uniform random 3D rotation (SO(3)) using Shoemake's quaternion method.
+
+    This is mathematically uniform over rotations, unlike sampling independent
+    Euler angles around x/y/z.
+    Reference: "Uniform Random Rotations", Ken Shoemake, Graphics Gems III.
+    """
+
+    def __init__(self, center=None, always_apply=False, p=0.5):
+        self.center = center
+        self.always_apply = always_apply
+        self.p = p if not self.always_apply else 1.0
+
+    @staticmethod
+    def _sample_rotation_matrix() -> np.ndarray:
+        # Sample 3 uniform random numbers in [0, 1)
+        x0, x1, x2 = np.random.rand(3).astype(np.float64)
+        theta1 = 2.0 * math.pi * x1
+        theta2 = 2.0 * math.pi * x2
+        r1 = math.sqrt(1.0 - x0)
+        r2 = math.sqrt(x0)
+
+        s1, c1 = math.sin(theta1), math.cos(theta1)
+        s2, c2 = math.sin(theta2), math.cos(theta2)
+
+        # quaternion q = [w, x, y, z]
+        w = r2 * c2
+        x = r1 * s1
+        y = r1 * c1
+        z = r2 * s2
+
+        # quaternion -> rotation matrix
+        rot = np.zeros((3, 3), dtype=np.float32)
+        rot[0, 0] = 1.0 - 2.0 * y * y - 2.0 * z * z
+        rot[0, 1] = 2.0 * x * y - 2.0 * z * w
+        rot[0, 2] = 2.0 * x * z + 2.0 * y * w
+        rot[1, 0] = 2.0 * x * y + 2.0 * z * w
+        rot[1, 1] = 1.0 - 2.0 * x * x - 2.0 * z * z
+        rot[1, 2] = 2.0 * y * z - 2.0 * x * w
+        rot[2, 0] = 2.0 * x * z - 2.0 * y * w
+        rot[2, 1] = 2.0 * y * z + 2.0 * x * w
+        rot[2, 2] = 1.0 - 2.0 * x * x - 2.0 * y * y
+        return rot
+
+    def __call__(self, data_dict):
+        if random.random() > self.p:
+            return data_dict
+
+        rot_t = self._sample_rotation_matrix()
+
+        if "coord" in data_dict.keys():
+            if self.center is None:
+                x_min, y_min, z_min = data_dict["coord"].min(axis=0)
+                x_max, y_max, z_max = data_dict["coord"].max(axis=0)
+                center = np.array(
+                    [(x_min + x_max) / 2, (y_min + y_max) / 2, (z_min + z_max) / 2],
+                    dtype=np.float32,
+                )
+            else:
+                center = np.asarray(self.center, dtype=np.float32)
+            data_dict["coord"] = (data_dict["coord"] - center) @ rot_t.T + center
+
+        if "normal" in data_dict.keys():
+            data_dict["normal"] = data_dict["normal"] @ rot_t.T
+
         return data_dict
 
 

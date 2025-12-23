@@ -21,9 +21,12 @@ num_atom_types = 26
 grid_size = 0.1
 train_tf = [
     dict(type="CenterShiftMolecule"),
-    dict(type="RandomRotate", angle=[-1, 1], axis="z", p=1.0),
-    dict(type="RandomRotate", angle=[-1, 1], axis="y", p=1.0),
-    dict(type="RandomRotate", angle=[-1, 1], axis="x", p=1.0),
+    # dict(type="RandomRotate", angle=[-1, 1], axis="z", p=1.0),
+    # dict(type="RandomRotate", angle=[-1, 1], axis="y", p=1.0),
+    # dict(type="RandomRotate", angle=[-1, 1], axis="x", p=1.0),
+    # uniform SO(3) rotation (mathematically uniform), better than composing
+    # independent x/y/z Euler rotations which is not uniform.
+    dict(type="UniformRandomRotate3D", p=1.0),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type", "identity"]),
     dict(type="ToTensor"),
@@ -114,8 +117,8 @@ test = dict(type="LBARegressionTester", verbose=True, save_pred=True)
 
 
 # Training schedule
-epoch = 500
-eval_epoch = 500
+epoch = 1000
+eval_epoch = 1000
 lr = 0.00005
 optimizer = dict(type="AdamW", lr=lr, weight_decay=0.01)
 # scheduler = dict(
