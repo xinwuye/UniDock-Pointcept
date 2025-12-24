@@ -27,7 +27,7 @@ def encode(grid_coord, batch=None, depth=16, order="z", coord=None, atom_type=No
     elif order == "pre-bwms":
         if pre_bwms_order is None:
             raise ValueError("Serialization order 'pre-bwms' requires pre-computed order as input.")
-        code = pre_bwms_order.to(grid_coord.device)
+        code = pre_bwms_order.to(grid_coord.device).long()
     else:
         raise NotImplementedError
     if batch is not None:

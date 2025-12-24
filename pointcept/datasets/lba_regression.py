@@ -52,7 +52,14 @@ class LBARegressionDataset(DefaultDataset):
         data_dict["affinity"] = aff
 
         # Make sure indexing-based transforms also slice these point-wise arrays.
-        data_dict["index_valid_keys"] = ["coord", "atom_type", "identity", "segment", "instance"]
+        data_dict["index_valid_keys"] = [
+            "coord",
+            "atom_type",
+            "identity",
+            "segment",
+            "instance",
+            "bwms_order",
+        ]
         return data_dict
 
 
