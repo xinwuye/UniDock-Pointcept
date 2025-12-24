@@ -7,8 +7,8 @@ from .bwms import get_bwms_coder
 
 
 @torch.inference_mode()
-def encode(grid_coord, batch=None, depth=16, order="z", coord=None, atom_type=None, atom_types_json_path=None):
-    assert order in {"z", "z-trans", "hilbert", "hilbert-trans", "bwms"}
+def encode(grid_coord, batch=None, depth=16, order="z", coord=None, atom_type=None, atom_types_json_path=None, pre_bwms_order=None):
+    assert order in {"z", "z-trans", "hilbert", "hilbert-trans", "bwms", "pre-bwms"}
     if order == "z":
         code = z_order_encode(grid_coord, depth=depth)
     elif order == "z-trans":
@@ -24,6 +24,10 @@ def encode(grid_coord, batch=None, depth=16, order="z", coord=None, atom_type=No
             raise ValueError("BWMS order requires 'atom_types_json_path' as input.")
         code = get_bwms_coder(atom_types_json_path).encode(coord, atom_type, batch=batch)
         code = torch.from_numpy(code).to(grid_coord.device)
+    elif order == "pre-bwms":
+        if pre_bwms_order is None:
+            raise ValueError("Serialization order 'pre-bwms' requires pre-computed order as input.")
+        code = pre_bwms_order.to(grid_coord.device)
     else:
         raise NotImplementedError
     if batch is not None:

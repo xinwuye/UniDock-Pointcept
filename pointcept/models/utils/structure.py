@@ -88,16 +88,16 @@ class Point(Dict):
         #  OrderN ([n])] (k, n)
         code = []
         for order_ in order:
-            if order_ == "bwms":
-                # For BWMS, we need coord and atom_type
+            if order_ in ["bwms", "pre-bwms"]:
+                # For BWMS or pre-computed BWMS, we need extra metadata
                 atom_type = self.get("atom_type", None)
                 if atom_type is None and "feat" in self.keys():
                     # Fallback: assuming atom_type is the first 26 dims of feat
                     atom_type = self.feat[:, :26]
-                
+
                 # Dynamic path for atom_types.json
                 atom_types_json_path = self.get("atom_types_json_path", None)
-                
+
                 code.append(
                     encode(
                         self.grid_coord,
@@ -107,6 +107,7 @@ class Point(Dict):
                         coord=self.coord,
                         atom_type=atom_type,
                         atom_types_json_path=atom_types_json_path,
+                        pre_bwms_order=self.get("bwms_order", None),
                     )
                 )
             else:

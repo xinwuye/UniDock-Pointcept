@@ -94,6 +94,7 @@ class LBAPTV3Regressor(nn.Module):
             atom_type=input_dict.get("atom_type"),
             identity=input_dict.get("identity"),
             atom_types_json_path=input_dict.get("atom_types_json_path"),
+            bwms_order=input_dict.get("bwms_order"),
         )
         for k, v in list(batch.items()):
             if isinstance(v, torch.Tensor):

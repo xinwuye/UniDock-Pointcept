@@ -25,7 +25,7 @@ import os
 class LBARegressionDataset(DefaultDataset):
     """Dataset that loads coord/atom_type/identity plus affinity label."""
 
-    VALID_ASSETS = ["coord", "atom_type", "identity", "affinity"]
+    VALID_ASSETS = ["coord", "atom_type", "identity", "affinity", "bwms_order"]
 
     def get_data(self, idx):
         data_dict = super().get_data(idx)
