@@ -32,7 +32,7 @@ train_tf = [
     dict(type="ToTensor"),
     dict(
         type="Collect",
-        keys=("coord", "grid_coord", "atom_type", "identity", "affinity"),
+        keys=("coord", "grid_coord", "atom_type", "identity", "affinity", "atom_types_json_path"),
         feat_keys=("atom_type", "identity", "coord"),
     ),
 ]
@@ -44,7 +44,7 @@ eval_tf = [
     dict(type="ToTensor"),
     dict(
         type="Collect",
-        keys=("coord", "grid_coord", "atom_type", "identity", "affinity"),
+        keys=("coord", "grid_coord", "atom_type", "identity", "affinity", "atom_types_json_path"),
         feat_keys=("atom_type", "identity", "coord"),
     ),
 ]
@@ -80,7 +80,8 @@ model = dict(
     backbone=dict(
         type="PT-v3m1",
         in_channels=num_atom_types + 2 + 3,  # atom_type + identity + coord
-        order=("z", "z-trans"),
+        # order=("z", "z-trans"),
+        order=("bwms",),
         # stride=(2, 2, 2, 2, 2, 2),
         # enc_depths=(2, 2, 2, 2, 2, 2, 2),
         # enc_channels=(64, 128, 256, 512, 512, 512, 512),

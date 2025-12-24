@@ -3,11 +3,12 @@ from .z_order import xyz2key as z_order_encode_
 from .z_order import key2xyz as z_order_decode_
 from .hilbert import encode as hilbert_encode_
 from .hilbert import decode as hilbert_decode_
+from .bwms import get_bwms_coder
 
 
 @torch.inference_mode()
-def encode(grid_coord, batch=None, depth=16, order="z"):
-    assert order in {"z", "z-trans", "hilbert", "hilbert-trans"}
+def encode(grid_coord, batch=None, depth=16, order="z", coord=None, atom_type=None, atom_types_json_path=None):
+    assert order in {"z", "z-trans", "hilbert", "hilbert-trans", "bwms"}
     if order == "z":
         code = z_order_encode(grid_coord, depth=depth)
     elif order == "z-trans":
@@ -16,6 +17,13 @@ def encode(grid_coord, batch=None, depth=16, order="z"):
         code = hilbert_encode(grid_coord, depth=depth)
     elif order == "hilbert-trans":
         code = hilbert_encode(grid_coord[:, [1, 0, 2]], depth=depth)
+    elif order == "bwms":
+        if coord is None or atom_type is None:
+            raise ValueError("BWMS order requires 'coord' and 'atom_type' as input.")
+        if atom_types_json_path is None:
+            raise ValueError("BWMS order requires 'atom_types_json_path' as input.")
+        code = get_bwms_coder(atom_types_json_path).encode(coord, atom_type)
+        code = torch.from_numpy(code).to(grid_coord.device)
     else:
         raise NotImplementedError
     if batch is not None:

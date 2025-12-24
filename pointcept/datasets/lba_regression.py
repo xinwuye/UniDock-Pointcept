@@ -17,6 +17,10 @@ from .defaults import DefaultDataset
 from .builder import DATASETS
 
 
+import os
+
+# ... (imports)
+
 @DATASETS.register_module()
 class LBARegressionDataset(DefaultDataset):
     """Dataset that loads coord/atom_type/identity plus affinity label."""
@@ -25,6 +29,9 @@ class LBARegressionDataset(DefaultDataset):
 
     def get_data(self, idx):
         data_dict = super().get_data(idx)
+        
+        # Inject atom_types.json path relative to data_root
+        data_dict["atom_types_json_path"] = os.path.join(self.data_root, "atom_types.json")
 
         missing = [k for k in ("coord", "atom_type", "identity", "affinity") if k not in data_dict]
         if missing:

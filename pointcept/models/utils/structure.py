@@ -86,9 +86,31 @@ class Point(Dict):
         #  Order2 ([n]),
         #   ...
         #  OrderN ([n])] (k, n)
-        code = [
-            encode(self.grid_coord, self.batch, depth, order=order_) for order_ in order
-        ]
+        code = []
+        for order_ in order:
+            if order_ == "bwms":
+                # For BWMS, we need coord and atom_type
+                atom_type = self.get("atom_type", None)
+                if atom_type is None and "feat" in self.keys():
+                    # Fallback: assuming atom_type is the first 26 dims of feat
+                    atom_type = self.feat[:, :26]
+                
+                # Dynamic path for atom_types.json
+                atom_types_json_path = self.get("atom_types_json_path", None)
+                
+                code.append(
+                    encode(
+                        self.grid_coord,
+                        self.batch,
+                        depth,
+                        order=order_,
+                        coord=self.coord,
+                        atom_type=atom_type,
+                        atom_types_json_path=atom_types_json_path,
+                    )
+                )
+            else:
+                code.append(encode(self.grid_coord, self.batch, depth, order=order_))
         code = torch.stack(code)
         order = torch.argsort(code)
         inverse = torch.zeros_like(order).scatter_(
