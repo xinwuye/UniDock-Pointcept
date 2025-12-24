@@ -29,7 +29,12 @@ train_tf = [
     # # independent x/y/z Euler rotations which is not uniform.
     # dict(type="UniformRandomRotate3D", p=1.0),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
-    dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type", "identity"]),
+    dict(
+        type="GridSampleAccumulate",
+        grid_size=grid_size,
+        feat_keys=["atom_type", "identity"],
+        sample_keys=["bwms_order"],
+    ),
     dict(type="ToTensor"),
     dict(
         type="Collect",
@@ -41,7 +46,12 @@ train_tf = [
 eval_tf = [
     dict(type="CenterShiftMolecule"),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
-    dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type", "identity"]),
+    dict(
+        type="GridSampleAccumulate",
+        grid_size=grid_size,
+        feat_keys=["atom_type", "identity"],
+        sample_keys=["bwms_order"],
+    ),
     dict(type="ToTensor"),
     dict(
         type="Collect",

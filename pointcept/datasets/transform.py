@@ -1267,6 +1267,7 @@ class GridSampleAccumulate(object):
         grid_size=0.05,
         hash_type="fnv",
         feat_keys=None,
+        sample_keys=None,
         return_grid_coord=True,
         return_inverse=False,
         return_min_coord=False,
@@ -1276,6 +1277,7 @@ class GridSampleAccumulate(object):
             GridSample.fnv_hash_vec if hash_type == "fnv" else GridSample.ravel_hash_vec
         )
         self.feat_keys = feat_keys or []
+        self.sample_keys = sample_keys or []
         self.return_grid_coord = return_grid_coord
         self.return_inverse = return_inverse
         self.return_min_coord = return_min_coord
@@ -1304,6 +1306,13 @@ class GridSampleAccumulate(object):
             if key in data_dict:
                 feat_sorted = data_dict[key][idx_sort]
                 feat_agg[key] = np.add.reduceat(feat_sorted, idx_ptr[:-1], axis=0)
+
+        for key in self.sample_keys:
+            if key in data_dict:
+                feat_sorted = data_dict[key][idx_sort]
+                random_offsets = np.random.randint(0, count)
+                picked_indices = idx_ptr[:-1] + random_offsets
+                feat_agg[key] = feat_sorted[picked_indices]
 
         data_dict = index_operator(data_dict, idx_unique)
 
