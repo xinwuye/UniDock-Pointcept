@@ -19,6 +19,7 @@ num_atom_types = 26
 
 
 grid_size = 0.1
+# grid_size = 0.05
 train_tf = [
     dict(type="CenterShiftMolecule"),
     dict(type="RandomRotate", angle=[-1, 1], axis="z", p=1.0),
@@ -80,8 +81,8 @@ model = dict(
     backbone=dict(
         type="PT-v3m1",
         in_channels=num_atom_types + 2 + 3,  # atom_type + identity + coord
-        # order=("z", "z-trans"),
-        order=("pre-bwms",),
+        order=("z", "z-trans"),
+        # order=("pre-bwms",),
         # stride=(2, 2, 2, 2, 2, 2),
         # enc_depths=(2, 2, 2, 2, 2, 2, 2),
         # enc_channels=(64, 128, 256, 512, 512, 512, 512),
