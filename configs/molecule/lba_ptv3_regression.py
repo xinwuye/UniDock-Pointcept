@@ -21,12 +21,12 @@ num_atom_types = 26
 grid_size = 0.1
 train_tf = [
     dict(type="CenterShiftMolecule"),
-    # dict(type="RandomRotate", angle=[-1, 1], axis="z", p=1.0),
-    # dict(type="RandomRotate", angle=[-1, 1], axis="y", p=1.0),
-    # dict(type="RandomRotate", angle=[-1, 1], axis="x", p=1.0),
-    # uniform SO(3) rotation (mathematically uniform), better than composing
-    # independent x/y/z Euler rotations which is not uniform.
-    dict(type="UniformRandomRotate3D", p=1.0),
+    dict(type="RandomRotate", angle=[-1, 1], axis="z", p=1.0),
+    dict(type="RandomRotate", angle=[-1, 1], axis="y", p=1.0),
+    dict(type="RandomRotate", angle=[-1, 1], axis="x", p=1.0),
+    # # uniform SO(3) rotation (mathematically uniform), better than composing
+    # # independent x/y/z Euler rotations which is not uniform.
+    # dict(type="UniformRandomRotate3D", p=1.0),
     dict(type="Copy", keys_dict={"coord": "coord_aug_before_voxel"}),
     dict(type="GridSampleAccumulate", grid_size=grid_size, feat_keys=["atom_type", "identity"]),
     dict(type="ToTensor"),
@@ -81,12 +81,16 @@ model = dict(
         type="PT-v3m1",
         in_channels=num_atom_types + 2 + 3,  # atom_type + identity + coord
         order=("z", "z-trans"),
-        stride=(2, 2, 2, 2, 2, 2),
-        enc_depths=(2, 2, 2, 2, 2, 2, 2),
-        enc_channels=(64, 128, 256, 512, 512, 512, 512),
-        enc_num_head=(2, 4, 8, 16, 32, 32, 32),
-        # enc_patch_size=(256, 256, 256, 256, 256, 256, 256),
-        enc_patch_size=(128, 128, 128, 128, 128, 128, 128),
+        # stride=(2, 2, 2, 2, 2, 2),
+        # enc_depths=(2, 2, 2, 2, 2, 2, 2),
+        # enc_channels=(64, 128, 256, 512, 512, 512, 512),
+        # enc_num_head=(2, 4, 8, 16, 32, 32, 32),
+        # enc_patch_size=(128, 128, 128, 128, 128, 128, 128),
+        stride=(2, 2, 2, 2, 2, 2, 2, 2),
+        enc_depths=(2, 2, 2, 2, 2, 2, 2, 2, 2),
+        enc_channels=(64, 128, 256, 512, 512, 512, 512, 512, 512),
+        enc_num_head=(2, 4, 8, 16, 32, 32, 32, 32, 32),
+        enc_patch_size=(128, 128, 128, 128, 128, 128, 128, 128, 128),
         mlp_ratio=4,
         qkv_bias=True,
         qk_scale=None,
