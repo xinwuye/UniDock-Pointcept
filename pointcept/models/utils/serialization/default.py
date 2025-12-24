@@ -22,7 +22,7 @@ def encode(grid_coord, batch=None, depth=16, order="z", coord=None, atom_type=No
             raise ValueError("BWMS order requires 'coord' and 'atom_type' as input.")
         if atom_types_json_path is None:
             raise ValueError("BWMS order requires 'atom_types_json_path' as input.")
-        code = get_bwms_coder(atom_types_json_path).encode(coord, atom_type)
+        code = get_bwms_coder(atom_types_json_path).encode(coord, atom_type, batch=batch)
         code = torch.from_numpy(code).to(grid_coord.device)
     else:
         raise NotImplementedError
