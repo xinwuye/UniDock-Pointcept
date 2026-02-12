@@ -15,9 +15,20 @@ set -euo pipefail
 mkdir -p slurm
 
 # Load conda in non-interactive shell.
-if [ -f "$HOME/.bashrc" ]; then
-  source "$HOME/.bashrc"
+if [ -f "/public/home/xinwuye/miniconda/etc/profile.d/conda.sh" ]; then
+  source "/public/home/xinwuye/miniconda/etc/profile.d/conda.sh"
+elif command -v conda >/dev/null 2>&1; then
+  CONDA_BASE=$(conda info --base)
+  source "${CONDA_BASE}/etc/profile.d/conda.sh"
+elif [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
+  source "$HOME/miniconda3/etc/profile.d/conda.sh"
+elif [ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]; then
+  source "$HOME/anaconda3/etc/profile.d/conda.sh"
+else
+  echo "ERROR: conda not found. Please load conda module or update this script." >&2
+  exit 1
 fi
+
 conda activate pointcept-torch2.5.0-cu12.4
 
 cd /public/home/xinwuye/UniDock-Pointcept
