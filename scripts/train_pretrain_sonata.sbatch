@@ -15,6 +15,9 @@ set -euo pipefail
 mkdir -p slurm
 
 # Load conda in non-interactive shell.
+# NOTE: conda activation scripts may read unset vars (e.g. MKL_INTERFACE_LAYER),
+# which conflicts with `set -u`. Temporarily disable nounset for activation.
+set +u
 if [ -f "/public/home/xinwuye/miniconda/etc/profile.d/conda.sh" ]; then
   source "/public/home/xinwuye/miniconda/etc/profile.d/conda.sh"
 elif command -v conda >/dev/null 2>&1; then
@@ -30,6 +33,7 @@ else
 fi
 
 conda activate pointcept-torch2.5.0-cu12.4
+set -u
 
 cd /public/home/xinwuye/UniDock-Pointcept
 
