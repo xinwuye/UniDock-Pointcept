@@ -18,6 +18,9 @@ mkdir -p slurm
 # NOTE: conda activation scripts may read unset vars (e.g. MKL_INTERFACE_LAYER),
 # which conflicts with `set -u`. Temporarily disable nounset for activation.
 set +u
+if [ -f "$HOME/.bashrc" ]; then
+  source "$HOME/.bashrc"
+fi
 if [ -f "/public/home/xinwuye/miniconda/etc/profile.d/conda.sh" ]; then
   source "/public/home/xinwuye/miniconda/etc/profile.d/conda.sh"
 elif command -v conda >/dev/null 2>&1; then
