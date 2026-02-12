@@ -11,7 +11,7 @@ _base_ = ["../_base_/default_runtime.py"]
 # -----------------------------------------------------------------------------
 # Runtime
 # -----------------------------------------------------------------------------
-batch_size = 96  # total batch size across all GPUs
+batch_size = 4  # total batch size across all GPUs
 num_worker = 32
 mix_prob = 0
 clip_grad = 3.0
