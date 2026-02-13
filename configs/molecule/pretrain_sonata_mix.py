@@ -175,7 +175,7 @@ model = dict(
 # Optimizer / Scheduler
 # -----------------------------------------------------------------------------
 epoch = 200
-base_lr = 0.05
+base_lr = 0.004
 lr_decay = 0.9  # layer-wise lr decay
 base_wd = 0.04
 final_wd = 0.2
